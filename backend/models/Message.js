@@ -6,6 +6,7 @@ const messageSchema = new mongoose.Schema(
     senderId: { type: String, required: true },
     senderName: { type: String, required: true },
     receiverId: { type: String, required: true },
+    receiverName: { type: String, default: '' },
     productId: { type: String, default: '' },
     text: { type: String, required: true },
     read: { type: Boolean, default: false },

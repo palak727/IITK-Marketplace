@@ -10,8 +10,14 @@ const connectDB = async () => {
   }
 
   try {
+    if (mongoose.connection.readyState === 1) {
+      setMemoryMode(false);
+      return true;
+    }
     const conn = await mongoose.connect(uri, {
-      serverSelectionTimeoutMS: 3000, // Fail fast after 3s so frontend doesn't timeout (10s)
+      bufferCommands: false,
+      serverSelectionTimeoutMS: 5000,
+      maxPoolSize: 5,
     });
     console.log(`MongoDB Connected: ${conn.connection.host}`);
     setMemoryMode(false);

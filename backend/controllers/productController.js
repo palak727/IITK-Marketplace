@@ -28,10 +28,7 @@ const rankProducts = (list, q) => {
 };
 
 export const getProducts = async (req, res) => {
-  const { category, hall, search, condition, status, page = 1, limit = 12 } = req.query;
-  const pageNum = Math.max(1, Number(page) || 1);
-  const limitNum = Math.min(50, Math.max(1, Number(limit) || 12));
-  const skip = (pageNum - 1) * limitNum;
+  const { category, hall, search, condition, status } = req.query;
 
   if (isMemoryMode()) {
     let list = [...memoryStore.products];
@@ -58,17 +55,7 @@ export const getProducts = async (req, res) => {
       list = rankProducts(list, search);
     }
 
-    const total = list.length;
-    const totalPages = Math.max(1, Math.ceil(total / limitNum));
-    const paginated = list.slice(skip, skip + limitNum);
-
-    return res.json({
-      products: paginated,
-      page: pageNum,
-      limit: limitNum,
-      total,
-      totalPages,
-    });
+    return res.json({ products: list, total: list.length });
   }
 
   try {
@@ -90,20 +77,8 @@ export const getProducts = async (req, res) => {
       ];
     }
 
-    const total = await Product.countDocuments(filter);
-    const list = await Product.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limitNum);
-    const totalPages = Math.max(1, Math.ceil(total / limitNum));
-
-    return res.json({
-      products: list,
-      page: pageNum,
-      limit: limitNum,
-      total,
-      totalPages,
-    });
+    const list = await Product.find(filter).sort({ createdAt: -1 });
+    return res.json({ products: list, total: list.length });
   } catch (error) {
     return res.status(500).json({ message: error.message });
   }

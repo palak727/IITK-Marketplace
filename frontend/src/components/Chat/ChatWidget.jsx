@@ -1,13 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Circle, Tag, MapPin } from 'lucide-react';
-import axios from 'axios';
 import LazyImage from '../LazyImage/LazyImage';
 import { useShop } from '../../context/ShopContext';
-import { formatPrice, getProductId, getStatusBadge } from '../../utils/api';
+import { api, formatPrice, getProductId, getStatusBadge } from '../../utils/api';
 
 const ChatWidget = () => {
-  const { activeChat, closeChat, sendMessage, auth, socket, onlineUsers } = useShop();
+  const { activeChat, closeChat, sendMessage, auth, socket, onlineUsers, token } = useShop();
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const bottomRef = useRef(null);
@@ -27,17 +26,13 @@ const ChatWidget = () => {
 
     const fetchHistory = async () => {
       try {
-        const token = auth?.token || localStorage.getItem('token');
+        const authToken = token || auth?.token;
         const [historyRes, readRes] = await Promise.all([
-          axios.get(`/api/chat/conversation/${conversationId}`, {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          axios.post(`/api/chat/conversation/${conversationId}/read`, {}, {
-            headers: { Authorization: `Bearer ${token}` }
-          }).catch(() => null)
+          api.get(`/chat/conversation/${conversationId}`, authToken),
+          api.post(`/chat/conversation/${conversationId}/read`, {}, authToken).catch(() => null)
         ]);
 
-        setMessages(historyRes.data || []);
+        setMessages(historyRes || []);
         if (readRes) {
           setTimeout(() => {
             if (typeof window !== 'undefined') {
@@ -52,12 +47,11 @@ const ChatWidget = () => {
 
     fetchHistory();
 
-    let pollInterval;
-
+    let handler;
     if (socket && socket.connected) {
       socket.emit('chat:join', { conversationId });
 
-      const handler = (msg) => {
+      handler = (msg) => {
         if (!msg.conversationId || msg.conversationId === conversationId) {
           setMessages((prev) => {
             if (prev.some((m) => (m._id && m._id === msg._id) || (m.id && m.id === msg.id))) {
@@ -69,13 +63,12 @@ const ChatWidget = () => {
       };
 
       socket.on('chat:message', handler);
-      return () => socket.off('chat:message', handler);
-    } else {
-      // Fallback for Vercel Serverless where WebSockets fail
-      pollInterval = setInterval(fetchHistory, 3000);
-      return () => clearInterval(pollInterval);
     }
-  }, [socket, activeChat, auth, currentUserId, sellerId]);
+
+    return () => {
+      if (handler) socket.off('chat:message', handler);
+    };
+  }, [socket, activeChat, auth, currentUserId, sellerId, token]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });

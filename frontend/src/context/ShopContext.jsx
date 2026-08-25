@@ -70,7 +70,7 @@ const ShopContextProvider = ({ children }) => {
       return undefined;
     }
 
-    // Try socket but don't fail hard if not supported (e.g., on Vercel)
+    // Render hosts a persistent Socket.IO server for real-time chat.
     let s;
     try {
       s = io(SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
@@ -89,10 +89,10 @@ const ShopContextProvider = ({ children }) => {
 
       setSocket(s);
     } catch (err) {
-      console.warn('Socket connection failed, falling back to REST polling');
+      console.warn('Socket connection failed');
     }
 
-    // REST Fallback Polling (crucial for Vercel serverless)
+    // Keep unread counts fresh if a socket reconnects after a network interruption.
     const pollInterval = setInterval(() => {
       api.get('/chat/unread', token).then((r) => setUnreadCount(r.count)).catch(() => {});
     }, 5000);
@@ -246,11 +246,25 @@ const ShopContextProvider = ({ children }) => {
     if (!activeChat || !auth || !auth.user) return;
 
     const productId = String(activeChat.productId || getProductId(activeChat.product));
-    const conversationId = [auth.user.id, activeChat.sellerId].sort().join('_') + `_${productId}`;
+    if (socket?.connected) {
+      socket.emit('chat:send', {
+        receiverId: activeChat.sellerId,
+        productId,
+        text,
+        product: {
+          id: productId,
+          name: activeChat.product.name,
+          new_price: activeChat.product.new_price,
+          status: activeChat.product.status,
+          image: activeChat.product.image,
+        },
+      });
+      return;
+    }
 
-    // On Vercel, sockets won't work, so we rely on the REST API
+    // Temporary HTTP fallback while a socket reconnects.
     try {
-      await api.post(`/chat/conversation/${conversationId}/message`, {
+      await api.post('/chat/send', {
         receiverId: activeChat.sellerId,
         productId,
         text,

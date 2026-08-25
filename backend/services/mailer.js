@@ -1,8 +1,4 @@
 import nodemailer from 'nodemailer';
-
-// Simple in-process email queue for development/staging.
-// For production use a persistent queue (Redis + BullMQ / RabbitMQ) and worker processes.
-
 let transporter = null;
 const queue = [];
 let processing = false;

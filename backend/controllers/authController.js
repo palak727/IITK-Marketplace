@@ -36,7 +36,7 @@ export const requestOTP = async (req, res) => {
     // 2. Generate and store 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-    memoryStore.otps.set(cleanEmail, {
+    memoryStore.otps.set(`register_${cleanEmail}`, {
       otp,
       expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes expiry
     });
@@ -48,7 +48,7 @@ export const requestOTP = async (req, res) => {
       const transporter = createTransporter();
       if (transporter) {
         await transporter.sendMail({
-          from: `"IITK Marketplace" <${process.env.EMAIL_USER || 'no-reply@example.com'}>`,
+          from: `"IITK Marketplace" <${process.env.EMAIL_USER }>`,
           to: cleanEmail,
           subject: 'IITK Campus Marketplace - Email Verification OTP',
           html: `
@@ -86,13 +86,13 @@ export const verifyOTP = async (req, res) => {
     }
 
     const cleanEmail = email.toLowerCase().trim();
-    const record = memoryStore.otps.get(cleanEmail);
+    const record = memoryStore.otps.get(`register_${cleanEmail}`);
 
     if (!record || record.otp !== otp.toString().trim() || record.expiresAt < Date.now()) {
       return res.status(400).json({ message: 'Invalid or expired OTP.' });
     }
 
-    memoryStore.otps.delete(cleanEmail);
+    memoryStore.otps.delete(`register_${cleanEmail}`);
 
     return res.json({ message: 'Email verified successfully.' });
   } catch (error) {

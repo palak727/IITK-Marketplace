@@ -12,10 +12,24 @@ const getBaseUrl = () => {
 
 const API_BASE = getBaseUrl();
 
+// Seed assets are served by the Express backend, not by the separately deployed Vite app.
+export const getImageUrl = (src) => {
+  if (!src || !src.startsWith('/images/')) return src;
+
+  const siteOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
+  const apiOrigin = new URL(API_BASE, siteOrigin).origin;
+  return `${apiOrigin}${src}`;
+};
+
 const apiClient = axios.create({
   baseURL: API_BASE,
   timeout: 10000,
 });
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => Promise.reject(new Error(error.response?.data?.message || error.message || 'Request failed'))
+);
 
 export const CATEGORIES = [
   { slug: 'coolers', label: 'Coolers', icon: 'Wind', path: '/category/coolers' },

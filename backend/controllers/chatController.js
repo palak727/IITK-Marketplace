@@ -1,5 +1,6 @@
 import Message from '../models/Message.js';
 import { isMemoryMode, memoryStore } from '../store/memoryStore.js';
+import User from '../models/User.js';
 
 export const buildConversationId = (userA, userB, productId = '') => {
   const users = [String(userA), String(userB)].sort().join('_');
@@ -7,7 +8,7 @@ export const buildConversationId = (userA, userB, productId = '') => {
 };
 
 export const saveMessage = async (msgData) => {
-  const { conversationId, senderId, senderName, receiverId, productId, text } = msgData;
+  const { conversationId, senderId, senderName, receiverId, receiverName = '', productId, text } = msgData;
 
   if (isMemoryMode()) {
     const newMsg = {
@@ -17,6 +18,7 @@ export const saveMessage = async (msgData) => {
       senderId: String(senderId),
       senderName,
       receiverId: String(receiverId),
+      receiverName,
       productId: productId || '',
       text,
       read: false,
@@ -31,6 +33,7 @@ export const saveMessage = async (msgData) => {
     senderId: String(senderId),
     senderName,
     receiverId: String(receiverId),
+    receiverName,
     productId: productId || '',
     text,
     read: false,
@@ -94,14 +97,21 @@ export const getUserConversations = async (req, res) => {
 
 export const getConversationMessages = async (req, res) => {
   const { conversationId } = req.params;
+  const userId = String(req.user.id || req.user._id);
 
   if (isMemoryMode()) {
-    const list = memoryStore.messages.filter((m) => m.conversationId === conversationId);
+    const list = memoryStore.messages.filter(
+      (m) => m.conversationId === conversationId &&
+        (String(m.senderId) === userId || String(m.receiverId) === userId)
+    );
     return res.json(list);
   }
 
   try {
-    const list = await Message.find({ conversationId }).sort({ createdAt: 1 });
+    const list = await Message.find({
+      conversationId,
+      $or: [{ senderId: userId }, { receiverId: userId }],
+    }).sort({ createdAt: 1 });
     return res.json(list);
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -151,16 +161,33 @@ export const markAsRead = async (req, res) => {
 };
 
 export const sendMessageRest = async (req, res) => {
-  const { conversationId } = req.params;
   const { receiverId, productId, text, product } = req.body;
   const userId = String(req.user.id || req.user._id);
 
+  if (!receiverId || !String(text || '').trim()) {
+    return res.status(400).json({ message: 'A recipient and message text are required.' });
+  }
+  if (String(receiverId) === userId) {
+    return res.status(400).json({ message: 'You cannot message yourself.' });
+  }
+
+  const conversationId = buildConversationId(userId, receiverId, productId || '');
+
   try {
+    let receiverName = 'IITKian';
+    if (isMemoryMode()) {
+      receiverName = memoryStore.users.find((user) => String(user.id || user._id) === String(receiverId))?.name || receiverName;
+    } else {
+      const receiver = await User.findById(receiverId).select('name').lean();
+      if (!receiver) return res.status(404).json({ message: 'Recipient not found.' });
+      receiverName = receiver.name;
+    }
     const message = await saveMessage({
       conversationId,
       senderId: userId,
-      senderName: req.user.name || 'IITKian',
+      senderName: req.user.name,
       receiverId,
+      receiverName,
       productId: productId || '',
       text,
     });
@@ -168,8 +195,9 @@ export const sendMessageRest = async (req, res) => {
     const payload = message || {
       conversationId,
       senderId: userId,
-      senderName: req.user.name || 'IITKian',
+      senderName: req.user.name,
       receiverId,
+      receiverName,
       productId,
       text,
       createdAt: new Date(),

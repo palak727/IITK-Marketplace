@@ -6,6 +6,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
+import { fileURLToPath } from 'url';
 import connectDB from './config/db.js';
 
 import authRouter from './routes/auth.js';
@@ -21,23 +22,22 @@ dotenv.config();
 export const app = express();
 export const httpServer = createServer(app);
 
-const io = new Server(httpServer, {
-  cors: {
-    origin: true,
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-  },
-});
-
-setupSocketHandlers(io);
-
-app.use((req, res, next) => {
-  req.io = io;
-  next();
-});
+const allowedOrigins = (process.env.FRONTEND_URL || '')
+  .split(',')
+  .map((origin) => {
+    try {
+      return new URL(origin.trim()).origin;
+    } catch {
+      return origin.trim();
+    }
+  })
+  .filter(Boolean);
 
 app.use(cors({
-  origin: true,
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error('Origin is not allowed by CORS'));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
@@ -46,6 +46,12 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(rateLimitMiddleware);
+
+const io = new Server(httpServer, {
+  cors: { origin: allowedOrigins.length ? allowedOrigins : true, credentials: true },
+});
+app.set('onlineUsers', setupSocketHandlers(io));
+app.use((req, res, next) => { req.io = io; next(); });
 
 // Connect to MongoDB (falls back to in-memory mode if unavailable)
 connectDB()
@@ -61,9 +67,9 @@ connectDB()
   });
 
 
-const imagesDir = path.join(process.cwd(), 'public'); 
+const imagesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public', 'public', 'images');
 if (fs.existsSync(imagesDir)) {
-  app.use('/images', express.static(path.join(imagesDir, 'images')));
+  app.use('/images', express.static(imagesDir));
 }
 
 // Root path route handler to prevent 404s on main domain visits

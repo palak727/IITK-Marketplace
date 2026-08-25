@@ -9,8 +9,8 @@ Built a full-stack campus marketplace that helps IITK students buy and sell ever
 ## Stack
 
 - Frontend: React + Vite + Tailwind CSS
-- Backend: Node.js + Express + Socket.IO
-- Database: MongoDB with a resilient in-memory fallback for local development
+- Backend: Node.js + Express + Socket.IO (deployed on Render)
+- Database: MongoDB for durable data
 - Auth and security: JWT-based session handling and OTP verification workflows
 
 ## Architecture overview
@@ -18,7 +18,7 @@ Built a full-stack campus marketplace that helps IITK students buy and sell ever
 - Frontend: Vite single-page app that renders the product catalog, dashboard, cart, and chat experience.
 - Backend API: Express routes for authentication, product management, chat history, and seller workflows.
 - Database layer: MongoDB is the primary persistent store; the app automatically falls back to an in-memory store when no valid connection is configured.
-- Message system: Socket.IO handles real-time buyer-seller communication with conversation IDs scoped to a user + product pair so distinct inquiries remain isolated.
+- Message system: Socket.IO provides real-time buyer-seller chat through the persistent Render backend.
 - Queueing and async flow: OTP/email delivery is handled in a non-blocking style so the app can keep serving requests without waiting on mail transport delays.
 - Auth flow: JWT tokens are generated on login and validated for protected routes, while OTP verification enforces IITK-only access.
 
@@ -70,8 +70,8 @@ Built a full-stack campus marketplace that helps IITK students buy and sell ever
 
 ## Environment notes
 
-- The backend uses MongoDB when MONGO_URI is set.
-- If MONGO_URI is missing or invalid, the app automatically falls back to in-memory storage for local development.
+- The backend uses MongoDB when MONGO_URI is set. Configure it on Render; the in-memory fallback is local-development only and is intentionally ephemeral.
+- Deploy the backend to Render and set FRONTEND_URL to the frontend URL. Set frontend VITE_API_BASE_URL to `https://your-backend.onrender.com/api` and VITE_SOCKET_URL to `https://your-backend.onrender.com`.
 - A /health endpoint returns app health and uptime for deployment checks.
 - For live email delivery, configure EMAIL_USER and EMAIL_PASS in the backend environment.
 
@@ -80,10 +80,10 @@ Built a full-stack campus marketplace that helps IITK students buy and sell ever
 - Verified IITK mail registration and login
 - OTP request and verification flow
 - Product browsing by category, hall, and search filters
-- Paginated marketplace product lists for smoother browsing
+- Filtered marketplace product lists
 - Add-to-cart and cart total tracking
 - Seller product reservations and status updates
-- Real-time chat through Socket.IO
+- chat through HTTP polling
 - Reset password flow using OTP
 - Sold-item filtering from public listings
 

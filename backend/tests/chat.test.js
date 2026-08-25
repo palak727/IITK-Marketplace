@@ -46,7 +46,7 @@ test('markAsRead updates only the recipient messages in the requested thread', a
   ];
 
   const response = await markAsRead({ params: { conversationId: 'u1_u2_p1' }, user: { id: 'u2' } }, { json: (data) => data });
-  const threadMessages = await getConversationMessages({ params: { conversationId: 'u1_u2_p1' } }, { json: (data) => data });
+  const threadMessages = await getConversationMessages({ params: { conversationId: 'u1_u2_p1' }, user: { id: 'u2' } }, { json: (data) => data });
 
   assert.equal(response.success, true);
   assert.equal(threadMessages[0].read, true || threadMessages[0].read === true);

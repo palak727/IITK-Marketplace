@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { getProducts, reserveProduct } from '../controllers/productController.js';
 import { setMemoryMode, memoryStore } from '../store/memoryStore.js';
 
-test('product list excludes sold items and supports pagination metadata', async () => {
+test('product list excludes sold items and returns the complete filtered list', async () => {
   setMemoryMode(true);
   memoryStore.products = [
     { _id: 'p1', id: 'p1', name: 'Cooler', status: 'available', category: 'coolers', hall: 'Hall 1', condition: 'Barely Used' },
@@ -15,12 +15,12 @@ test('product list excludes sold items and supports pagination metadata', async 
     json(payload) {
       assert.equal(payload.products.length, 2);
       assert.equal(payload.total, 2);
-      assert.equal(payload.page, 1);
+      assert.equal('page' in payload, false);
       return payload;
     },
   };
 
-  await getProducts({ query: { page: 1, limit: 2 } }, res);
+  await getProducts({ query: {} }, res);
 });
 
 test('search ranking orders the most relevant product first', async () => {

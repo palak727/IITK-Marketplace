@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'iitk_marketplace_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV !== 'production'
+  ? 'iitk_marketplace_secret_key_2026'
+  : undefined);
 
 export const verifyToken = (token) => {
   try {

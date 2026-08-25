@@ -35,6 +35,7 @@ export const setupSocketHandlers = (io) => {
         senderId: userId,
         senderName: socket.user.name,
         receiverId,
+        receiverName: product?.sellerName || 'IITKian',
         productId: productId || '',
         text,
       }).catch(() => null);

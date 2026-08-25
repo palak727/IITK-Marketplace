@@ -19,6 +19,7 @@ export const setupChatRoutes = (r) => {
   r.get('/unread', authMiddleware, getUnreadCount);
   r.get('/conversation/:conversationId', authMiddleware, getConversationMessages);
   r.post('/conversation/:conversationId/read', authMiddleware, markAsRead);
+  r.post('/send', authMiddleware, sendMessageRest);
   r.post('/conversation/:conversationId/message', authMiddleware, sendMessageRest);
 };
 
