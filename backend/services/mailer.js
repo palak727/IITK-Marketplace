@@ -1,31 +1,32 @@
-import nodemailer from 'nodemailer';
-let transporter = null;
+const RESEND_ENDPOINT = 'https://api.resend.com/emails';
 const queue = [];
 let processing = false;
 
-export const createTransporter = () => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return null;
-  if (transporter) return transporter;
+const sendWithResend = async (mailOptions) => {
+  if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured');
 
-  transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: Number(process.env.EMAIL_PORT || 465),
-    secure: process.env.EMAIL_SECURE ? process.env.EMAIL_SECURE === 'true' : true,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+  const response = await fetch(RESEND_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
     },
-    // keepAlive and connection timeout guards
-    socketTimeout: 10000,
-    connectionTimeout: 10000,
+    body: JSON.stringify({
+      from: process.env.RESEND_FROM || mailOptions.from,
+      to: [mailOptions.to],
+      subject: mailOptions.subject,
+      html: mailOptions.html,
+    }),
   });
 
-  return transporter;
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.message || `Resend request failed with ${response.status}`);
+  }
 };
 
 export const enqueueEmail = (mailOptions) => {
   queue.push({ mailOptions, attempts: 0, createdAt: Date.now() });
-  // kick the processor
   processQueue().catch(() => {});
 };
 
@@ -36,25 +37,14 @@ const processQueue = async () => {
   try {
     while (queue.length > 0) {
       const job = queue.shift();
-      const t = createTransporter();
-      if (!t) {
-        // transporter not configured; log and skip sending but keep job for debugging
-        console.warn('Mailer not configured — skipping email send:', job.mailOptions.to);
-        continue;
-      }
-
       try {
-        await t.sendMail(job.mailOptions);
-        console.log(`Mail sent to ${job.mailOptions.to}`);
-      } catch (err) {
+        await sendWithResend(job.mailOptions);
+        console.log(`Email delivered to ${job.mailOptions.to}`);
+      } catch (error) {
         job.attempts += 1;
-        console.error('Mailer send failed:', err.message || err);
-        // retry once after a short delay
+        console.error('Email delivery failed:', error.message);
         if (job.attempts < 2) {
           queue.push(job);
-          await new Promise((r) => setTimeout(r, 1000));
-        } else {
-          console.error('Mailer job failed permanently for', job.mailOptions.to);
         }
       }
     }
@@ -63,20 +53,6 @@ const processQueue = async () => {
   }
 };
 
-export const verifyTransporter = async () => {
-  const t = createTransporter();
-  if (!t) {
-    console.warn('EMAIL_USER or EMAIL_PASS not set — mailer disabled');
-    return false;
-  }
-  try {
-    await t.verify();
-    console.log('Mail transporter verified');
-    return true;
-  } catch (err) {
-    console.warn('Mail transporter verification failed:', err.message || err);
-    return false;
-  }
-};
+export const isMailerConfigured = () => Boolean(process.env.RESEND_API_KEY);
 
-export default { createTransporter, enqueueEmail, verifyTransporter };
+export default { enqueueEmail, isMailerConfigured };

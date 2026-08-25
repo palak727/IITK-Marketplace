@@ -41,11 +41,9 @@ export const requestOTP = async (req, res) => {
       expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes expiry
     });
 
-    console.log(`Registration OTP generated for ${cleanEmail}: ${otp}`);
-
     // Do not hold the HTTP request open while SMTP connects from Render.
     enqueueEmail({
-      from: `"IITK Marketplace" <${process.env.EMAIL_USER || 'no-reply@example.com'}>`,
+      from: process.env.RESEND_FROM || 'IITK Marketplace <onboarding@resend.dev>',
       to: cleanEmail,
       subject: 'IITK Campus Marketplace - Email Verification OTP',
       html: `
@@ -127,10 +125,8 @@ export const requestResetOTP = async (req, res) => {
       await user.save();
     }
 
-    console.log(`Reset OTP generated for ${cleanEmail}: ${otp}`);
-
     enqueueEmail({
-      from: `"IITK Marketplace" <${process.env.EMAIL_USER || 'no-reply@example.com'}>`,
+      from: process.env.RESEND_FROM || 'IITK Marketplace <onboarding@resend.dev>',
       to: cleanEmail,
       subject: 'IITK Campus Marketplace - Password Reset Verification Code',
       html: `
