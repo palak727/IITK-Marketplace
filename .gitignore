@@ -7,8 +7,8 @@ frontend/node_modules/
 .env
 backend/.env
 frontend/.env
-backend/ .env.example
-frontend/ .env.example
+backend/.env.example
+frontend/.env.example
 
 # Build outputs
 dist/

@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import { generateToken } from '../middleware/auth.js';
 import { isMemoryMode, memoryStore } from '../store/memoryStore.js';
-import { createTransporter } from '../services/mailer.js';
+import { enqueueEmail } from '../services/mailer.js';
 
 export const isIITKEmail = (email = '') => {
   return email.toLowerCase().trim().endsWith('@iitk.ac.in');
@@ -43,34 +43,23 @@ export const requestOTP = async (req, res) => {
 
     console.log(`Registration OTP generated for ${cleanEmail}: ${otp}`);
 
-    // 3. Send real email synchronously 
-    try {
-      const transporter = createTransporter();
-      if (transporter) {
-        await transporter.sendMail({
-          from: `"IITK Marketplace" <${process.env.EMAIL_USER }>`,
-          to: cleanEmail,
-          subject: 'IITK Campus Marketplace - Email Verification OTP',
-          html: `
-            <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;">
-              <h2 style="color: #1e3a8a;">IITK Campus Marketplace</h2>
-              <p>Your OTP verification code is:</p>
-              <h1 style="color: #2563eb; letter-spacing: 4px; font-size: 32px;">${otp}</h1>
-              <p style="font-size: 13px; color: #64748b;">This OTP will expire in 10 minutes.</p>
-            </div>
-          `,
-        });
-        console.log(`Mail sent successfully to ${cleanEmail}`);
-      } else {
-        console.warn('Mailer not configured — skipping email send.');
-      }
-    } catch (mailErr) {
-      console.error('Failed to send registration mail:', mailErr);
-    }
+    // Do not hold the HTTP request open while SMTP connects from Render.
+    enqueueEmail({
+      from: `"IITK Marketplace" <${process.env.EMAIL_USER || 'no-reply@example.com'}>`,
+      to: cleanEmail,
+      subject: 'IITK Campus Marketplace - Email Verification OTP',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;">
+          <h2 style="color: #1e3a8a;">IITK Campus Marketplace</h2>
+          <p>Your OTP verification code is:</p>
+          <h1 style="color: #2563eb; letter-spacing: 4px; font-size: 32px;">${otp}</h1>
+          <p style="font-size: 13px; color: #64748b;">This OTP will expire in 10 minutes.</p>
+        </div>
+      `,
+    });
 
     return res.json({
       message: 'OTP sent to your IITK webmail address.',
-      devOtp: otp, // Passed for dev mode toast notifications
     });
   } catch (error) {
     console.error('Request OTP error:', error);
@@ -140,34 +129,22 @@ export const requestResetOTP = async (req, res) => {
 
     console.log(`Reset OTP generated for ${cleanEmail}: ${otp}`);
 
-    // 3. Send reset email synchronously
-    try {
-      const transporter = createTransporter();
-      if (transporter) {
-        await transporter.sendMail({
-          from: `"IITK Marketplace" <${process.env.EMAIL_USER || 'no-reply@example.com'}>`,
-          to: cleanEmail,
-          subject: 'IITK Campus Marketplace - Password Reset Verification Code',
-          html: `
-            <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;">
-              <h2 style="color: #1e3a8a;">IITK Campus Marketplace</h2>
-              <p>Your verification code to reset your password is:</p>
-              <h1 style="color: #2563eb; letter-spacing: 4px; font-size: 32px;">${otp}</h1>
-              <p style="font-size: 13px; color: #64748b;">This OTP will expire in 10 minutes.</p>
-            </div>
-          `,
-        });
-        console.log(`Reset mail sent successfully to ${cleanEmail}`);
-      } else {
-        console.warn('Mailer not configured — skipping email send.');
-      }
-    } catch (mailErr) {
-      console.error('Failed to send reset mail:', mailErr);
-    }
+    enqueueEmail({
+      from: `"IITK Marketplace" <${process.env.EMAIL_USER || 'no-reply@example.com'}>`,
+      to: cleanEmail,
+      subject: 'IITK Campus Marketplace - Password Reset Verification Code',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #1e293b;">
+          <h2 style="color: #1e3a8a;">IITK Campus Marketplace</h2>
+          <p>Your verification code to reset your password is:</p>
+          <h1 style="color: #2563eb; letter-spacing: 4px; font-size: 32px;">${otp}</h1>
+          <p style="font-size: 13px; color: #64748b;">This OTP will expire in 10 minutes.</p>
+        </div>
+      `,
+    });
 
     return res.json({
       message: 'Password reset OTP sent to your email.',
-      devOtp: otp, // Passed for dev mode testing
     });
   } catch (error) {
     console.error('Request Reset OTP error:', error);
