@@ -29,8 +29,16 @@ const productSchema = new mongoose.Schema(
     reservedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     sellerId: { type: String, required: true },
     sellerName: { type: String, required: true },
+    clientRequestId: { type: String, default: undefined },
+    seedKey: { type: String, default: undefined },
   },
   { timestamps: true }
 );
+
+productSchema.index(
+  { sellerId: 1, clientRequestId: 1 },
+  { unique: true, partialFilterExpression: { clientRequestId: { $type: 'string' } } }
+);
+productSchema.index({ seedKey: 1 }, { unique: true, partialFilterExpression: { seedKey: { $type: 'string' } } });
 
 export default mongoose.models.Product || mongoose.model('Product', productSchema);

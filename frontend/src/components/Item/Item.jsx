@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MapPin, ShieldCheck, Tag } from 'lucide-react';
+import { MapPin, Tag } from 'lucide-react';
 import LazyImage from '../LazyImage/LazyImage';
 import { formatPrice, getProductId, getStatusBadge } from '../../utils/api';
 
@@ -64,9 +64,6 @@ const Item = ({ product = {} }) => {
               </span>
             )}
           </div>
-          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-            <ShieldCheck size={10} /> Verified
-          </span>
         </div>
       </div>
     </Link>

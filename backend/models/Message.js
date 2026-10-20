@@ -14,4 +14,7 @@ const messageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+messageSchema.index({ conversationId: 1, createdAt: -1 });
+messageSchema.index({ receiverId: 1, read: 1 });
+
 export default mongoose.models.Message || mongoose.model('Message', messageSchema);

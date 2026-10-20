@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useShop } from '../../context/ShopContext';
 import { X, MessageSquare, ChevronRight } from 'lucide-react';
 import { getProductId, api } from '../../utils/api';
@@ -6,6 +6,8 @@ import { getProductId, api } from '../../utils/api';
 export default function ChatInbox({ onClose }) {
   const [conversations, setConversations] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const { auth, openChat, all_product, unreadCount, socket } = useShop();
 
   useEffect(() => {
@@ -17,10 +19,15 @@ export default function ChatInbox({ onClose }) {
 
     const fetchMyChats = async () => {
       try {
-        const token = auth?.token || localStorage.getItem('token');
+        const token = auth?.token;
         setLoading(true);
-        const data = await api.get('/chat/my-conversations', token);
-        setConversations(data || []);
+        const data = await api.get(`/chat/my-conversations?page=${page}&limit=50`, token);
+        setConversations((previous) => {
+          const next = new Map(page === 1 ? [] : previous.map((item) => [item.conversationId, item]));
+          (data?.conversations || []).forEach((item) => next.set(item.conversationId, item));
+          return Array.from(next.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+        });
+        setTotal(data?.total || 0);
       } catch (err) {
         console.error('Failed to fetch chats:', err);
         setConversations([]);
@@ -30,7 +37,7 @@ export default function ChatInbox({ onClose }) {
     };
 
     fetchMyChats();
-  }, [auth, unreadCount, socket]);
+  }, [auth, unreadCount, socket, page]);
 
   useEffect(() => {
     if (!auth || !socket) return undefined;
@@ -127,6 +134,9 @@ export default function ChatInbox({ onClose }) {
               </div>
               );
             })
+          )}
+          {!loading && conversations.length < total && (
+            <button type="button" onClick={() => setPage((current) => current + 1)} className="w-full py-3 text-sm font-semibold text-royal">Load older conversations</button>
           )}
         </div>
       </div>

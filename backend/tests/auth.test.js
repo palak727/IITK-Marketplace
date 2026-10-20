@@ -1,8 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
+import User from '../models/User.js';
 import { isIITKEmail, register, login } from '../controllers/authController.js';
-import { setMemoryMode, memoryStore } from '../store/memoryStore.js';
+import { resetMongo } from './mongoMock.js';
 
 test('IITK email validation accepts valid campus email', () => {
   assert.equal(isIITKEmail('student@iitk.ac.in'), true);
@@ -13,8 +14,7 @@ test('IITK email validation rejects non-campus email', () => {
 });
 
 test('register rejects invalid non-IITK email', async () => {
-  setMemoryMode(true);
-  memoryStore.users = [];
+  resetMongo();
 
   let payload;
   await register(
@@ -25,14 +25,11 @@ test('register rejects invalid non-IITK email', async () => {
   assert.equal(payload.message.includes('Only @iitk.ac.in'), true);
 });
 
-test('login succeeds for valid memory-mode user', async () => {
-  setMemoryMode(true);
-  memoryStore.users = [];
+test('login succeeds for a valid MongoDB user', async () => {
+  resetMongo();
   const password = 'secret123';
   const hashed = await bcrypt.hash(password, 10);
-  memoryStore.users.push({
-    id: 'u-1',
-    _id: 'u-1',
+  await User.create({
     name: 'Alice',
     email: 'alice@iitk.ac.in',
     password: hashed,

@@ -27,7 +27,7 @@ const CATEGORY_META = {
 
 const ShopCategoryPage = () => {
   const { category } = useParams();
-  const { all_product } = useShop();
+  const { all_product, loading, productError, productPage, productLimit, productTotal, setProductPage, fetchProducts } = useShop();
 
   const meta = CATEGORY_META[category?.toLowerCase()] || {
     title: `${category || 'Category'} Essentials`,
@@ -38,6 +38,13 @@ const ShopCategoryPage = () => {
     <ShopCategoryComponent
       categoryName={category}
       products={all_product}
+      loading={loading}
+      error={productError}
+      page={productPage}
+      limit={productLimit}
+      total={productTotal}
+      onPageChange={setProductPage}
+      onRetry={fetchProducts}
       categoryTitle={meta.title}
       bannerDesc={meta.desc}
     />

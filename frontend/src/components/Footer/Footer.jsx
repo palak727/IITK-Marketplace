@@ -27,9 +27,6 @@ const Footer = () => {
             <p className="text-slate-400 text-sm leading-relaxed mb-4">
               A simple campus marketplace for students to buy, sell, and trade everyday essentials without the hassle.
             </p>
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
-              Closed @iitk.ac.in Network
-            </div>
           </motion.div>
 
           <motion.div
@@ -75,7 +72,7 @@ const Footer = () => {
             </h4>
             <ul className="space-y-2.5 text-slate-400 text-sm">
               <li>Kalyanpur, Kanpur, UP 208016</li>
-              <li>Verified via @iitk.ac.in webmail</li>
+              <li>Campus student marketplace</li>
             </ul>
           </motion.div>
         </div>

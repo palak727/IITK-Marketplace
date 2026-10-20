@@ -1,13 +1,10 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { Plus, Package, ToggleLeft, ToggleRight, Upload, MapPin, Tag, AlertCircle, ImageOff } from 'lucide-react';
+import { Plus, Package, Upload, MapPin, Tag, AlertCircle, ImageOff, Pencil, Check, RotateCcw } from 'lucide-react';
 import LazyImage from '../components/LazyImage/LazyImage';
 import { useShop } from '../context/ShopContext';
 import { api, CONDITIONS, CATEGORIES, formatPrice, getProductId, getStatusBadge, HALLS } from '../utils/api';
-
-const STATUS_OPTIONS = ['available', 'reserved', 'sold'];
 
 const INITIAL_FORM_STATE = {
   name: '',
@@ -21,31 +18,38 @@ const INITIAL_FORM_STATE = {
   image: '',
 };
 
+const newRequestId = () => globalThis.crypto?.randomUUID?.() || `listing-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 const Dashboard = () => {
-  const { auth, token, createProduct, updateProductStatus, deleteProduct } = useShop();
-  const navigate = useNavigate();
-  
+  const { auth, token, createProduct, updateProduct, updateProductStatus, deleteProduct } = useShop();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [listingError, setListingError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
     ...INITIAL_FORM_STATE,
     hall: auth?.user?.hall || 'Hall 12',
   });
+  const [saving, setSaving] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [createRequestId, setCreateRequestId] = useState(newRequestId);
+
+  const loadListings = useCallback(async () => {
+    setLoading(true);
+    setListingError('');
+    try {
+      setProducts(await api.get('/products/seller/mine', token));
+    } catch (error) {
+      setListingError(error.message || 'Unable to load your listings.');
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
-    if (!auth) {
-      navigate('/login');
-      return;
-    }
-    
-    api
-      .get('/products/seller/mine', token)
-      .then(setProducts)
-      .catch(() => setProducts([]))
-      .finally(() => setLoading(false));
-  }, [auth, token, navigate]);
+    if (auth) loadListings();
+  }, [auth, loadListings]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -70,11 +74,12 @@ const Dashboard = () => {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.new_price) {
+    if (!form.name.trim() || form.new_price === '' || saving || uploading) {
       toast.error('Item name and selling price are required');
       return;
     }
 
+    setSaving(true);
     try {
       const imgUrl = form.image || '';
       const payload = {
@@ -84,34 +89,53 @@ const Dashboard = () => {
         defects: form.defects ? form.defects.split(',').map((d) => d.trim()).filter(Boolean) : [],
         images: imgUrl ? [imgUrl] : [],
         image: imgUrl,
+        ...(editingProduct ? {} : { clientRequestId: createRequestId }),
       };
 
-      const created = await createProduct(payload);
-      setProducts((prev) => [created, ...prev]);
+      const saved = editingProduct
+        ? await updateProduct(getProductId(editingProduct), payload)
+        : await createProduct(payload);
+      setProducts((prev) => editingProduct
+        ? prev.map((product) => String(getProductId(product)) === String(getProductId(saved)) ? saved : product)
+        : [saved, ...prev]);
       setShowForm(false);
+      setEditingProduct(null);
+      setCreateRequestId(newRequestId());
       setForm({
         ...INITIAL_FORM_STATE,
         hall: auth?.user?.hall || 'Hall 12',
       });
-      toast.success('Listing published successfully!');
+      toast.success(editingProduct ? 'Listing updated successfully!' : 'Listing published successfully!');
     } catch (err) {
       toast.error(err.message || 'Failed to create listing');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleToggleStatus = async (product) => {
+  const handleStatus = async (product, status) => {
     const productId = getProductId(product);
-    const current = STATUS_OPTIONS.indexOf(product.status);
-    const next = STATUS_OPTIONS[(current + 1) % STATUS_OPTIONS.length];
-    
     try {
-      const updated = await updateProductStatus(productId, next);
+      const updated = await updateProductStatus(productId, status);
       setProducts((prev) =>
         prev.map((p) => (String(getProductId(p)) === String(productId) ? updated : p))
       );
     } catch (err) {
       toast.error(err.message || 'Failed to update status');
     }
+  };
+
+  const beginEdit = (product) => {
+    setEditingProduct(product);
+    setCreateRequestId('');
+    setForm({
+      ...INITIAL_FORM_STATE,
+      ...product,
+      defects: Array.isArray(product.defects) ? product.defects.join(', ') : '',
+      hall: product.hall || auth?.user?.hall || 'Hall 12',
+      image: product.image || '',
+    });
+    setShowForm(true);
   };
 
   const handleDeleteProduct = async (product) => {
@@ -127,8 +151,6 @@ const Dashboard = () => {
     }
   };
 
-  if (!auth) return null;
-
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
@@ -139,7 +161,14 @@ const Dashboard = () => {
           </p>
         </div>
         <button 
-          onClick={() => setShowForm(!showForm)} 
+          onClick={() => {
+            if (showForm) {
+              setEditingProduct(null);
+              setCreateRequestId(newRequestId());
+              setForm({ ...INITIAL_FORM_STATE, hall: auth?.user?.hall || 'Hall 12' });
+            }
+            setShowForm(!showForm);
+          }}
           className="btn-primary flex items-center gap-2 shadow-lg"
         >
           <Plus size={18} />
@@ -155,7 +184,7 @@ const Dashboard = () => {
           className="glass-card p-6 md:p-8 mb-8 space-y-4 border border-slate-200"
         >
           <h2 className="font-bold text-xl text-navy pb-2 border-b border-slate-100 flex items-center gap-2">
-            <Package size={20} className="text-royal" /> List a Campus Essential
+            <Package size={20} className="text-royal" /> {editingProduct ? 'Edit Listing' : 'List a Campus Essential'}
           </h2>
 
           <div className="grid sm:grid-cols-2 gap-4">
@@ -187,6 +216,8 @@ const Dashboard = () => {
               <input
                 name="new_price"
                 type="number"
+                min="0"
+                max="100000000"
                 value={form.new_price}
                 onChange={handleChange}
                 placeholder="Selling price"
@@ -200,6 +231,8 @@ const Dashboard = () => {
               <input
                 name="old_price"
                 type="number"
+                min="0"
+                max="100000000"
                 value={form.old_price}
                 onChange={handleChange}
                 placeholder="Original purchase price"
@@ -279,12 +312,17 @@ const Dashboard = () => {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button type="submit" className="btn-primary">
-              Publish Item Listing
+            <button type="submit" disabled={saving || uploading} className="btn-primary disabled:opacity-50">
+              {saving ? 'Saving...' : editingProduct ? 'Save Changes' : 'Publish Item Listing'}
             </button>
             <button
               type="button"
-              onClick={() => setShowForm(false)}
+              onClick={() => {
+                setShowForm(false);
+                setEditingProduct(null);
+                setCreateRequestId(newRequestId());
+                setForm({ ...INITIAL_FORM_STATE, hall: auth?.user?.hall || 'Hall 12' });
+              }}
               className="px-6 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 font-semibold text-slate-700"
             >
               Cancel
@@ -295,6 +333,11 @@ const Dashboard = () => {
 
       {loading ? (
         <div className="text-center py-12 text-slate-500">Loading your listings...</div>
+      ) : listingError ? (
+        <div role="alert" className="text-center py-12 glass-card">
+          <p className="text-rose-700">{listingError}</p>
+          <button type="button" onClick={loadListings} className="btn-secondary mt-4">Retry</button>
+        </div>
       ) : products.length === 0 ? (
         <div className="text-center py-16 glass-card border border-slate-200">
           <Package size={56} className="mx-auto text-slate-300 mb-3" />
@@ -336,20 +379,21 @@ const Dashboard = () => {
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0">
-                  <button
-                    onClick={() => handleToggleStatus(product)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-xs font-bold text-navy shrink-0 shadow-sm"
-                    title="Toggle Status: Available → Reserved → Sold"
-                  >
-                    {product.status === 'available' ? (
-                      <ToggleLeft size={20} className="text-emerald-500" />
-                    ) : (
-                      <ToggleRight size={20} className="text-amber-500" />
-                    )}
-                    Toggle Status
-                  </button>
+                  {product.status === 'available' && (
+                    <>
+                      <button onClick={() => beginEdit(product)} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-navy" title="Edit listing"><Pencil size={15} /> Edit</button>
+                      <button onClick={() => handleStatus(product, 'sold')} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-800" title="Mark sold"><Check size={15} /> Mark sold</button>
+                    </>
+                  )}
+                  {product.status === 'reserved' && (
+                    <>
+                      <button onClick={() => handleStatus(product, 'available')} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-xs font-bold text-amber-800" title="Cancel reservation"><RotateCcw size={15} /> Release</button>
+                      <button onClick={() => handleStatus(product, 'sold')} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-800" title="Mark sold"><Check size={15} /> Mark sold</button>
+                    </>
+                  )}
                   <button
                     onClick={() => handleDeleteProduct(product)}
+                    disabled={product.status === 'reserved'}
                     className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 shrink-0 shadow-sm"
                   >
                     Delete

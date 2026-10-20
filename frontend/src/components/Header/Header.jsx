@@ -1,18 +1,25 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Bell } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useShop } from '../../context/ShopContext';
 import ChatInbox from '../Chat/ChatInbox';
+import NotificationInbox from '../Notifications/NotificationInbox';
 import iitkLogo from '../../assets/iitk_logo.jpeg';
 
 const Header = () => {
-  // 1. Fetch user, logout, cart, unreadCount, and getCartCount from ShopContext
-  const { user, logout, cartItems, getCartCount, unreadCount } = useShop();
+  const { user, logout, getCartCount, unreadCount, notificationUnreadCount, searchQuery, setSearchQuery } = useShop();
   const [showInbox, setShowInbox] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Helper to get total cart count whether cartItems is an object or array
-  const totalCartCount = getCartCount 
-    ? getCartCount() 
-    : (Array.isArray(cartItems) ? cartItems.length : Object.values(cartItems || {}).reduce((a, b) => a + b, 0));
+  const handleSearch = (value) => {
+    setSearchQuery(value);
+    if (location.pathname !== '/') navigate('/');
+  };
+
+  const totalCartCount = getCartCount();
 
   return (
     <>
@@ -36,6 +43,8 @@ const Header = () => {
             <div className="relative">
               <input
                 type="text"
+                value={searchQuery}
+                onChange={(event) => handleSearch(event.target.value)}
                 placeholder="Search coolers, mattresses, cycles..."
                 className="input-field py-2 text-sm bg-slate-100/70 border-transparent focus:bg-white"
               />
@@ -54,16 +63,59 @@ const Header = () => {
             </Link>
 
             {/* 2. Sell Link */}
-            <Link
-              to="/dashboard"
-              className="px-3 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition-colors"
-            >
-              <span className="hidden sm:inline">Sell</span>
-            </Link>
+            {user ? (
+              <Link
+                to="/dashboard"
+                className="px-3 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <span className="hidden sm:inline">Sell</span>
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  toast.error('Please sign in to list an item.');
+                  navigate('/login', { state: { from: '/dashboard' } });
+                }}
+                className="px-3 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <span className="hidden sm:inline">Sell</span>
+              </button>
+            )}
 
             {/* Chat Inbox Button */}
             <button
-              onClick={() => setShowInbox(true)}
+              type="button"
+              onClick={() => {
+                if (!user) {
+                  toast.error('Please sign in to view notifications.');
+                  navigate('/login', { state: { from: location.pathname } });
+                  return;
+                }
+                setShowNotifications(true);
+              }}
+              className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors relative"
+              title="Notifications"
+              aria-label="Notifications"
+            >
+              <Bell size={19} />
+              {notificationUnreadCount > 0 && (
+                <span className="absolute top-1 right-1 w-4 h-4 bg-rose-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {notificationUnreadCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!user) {
+                  toast.error('Please sign in to view messages.');
+                  navigate('/login', { state: { from: location.pathname } });
+                  return;
+                }
+                setShowInbox(true);
+              }}
               className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors relative cursor-pointer"
               title="Messages"
             >
@@ -101,6 +153,7 @@ const Header = () => {
                   type="button"
                   onClick={() => {
                     setShowInbox(false);
+                    setShowNotifications(false);
                     logout();
                   }}
                   className="p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
@@ -120,10 +173,21 @@ const Header = () => {
           </div>
 
         </div>
+        <div className="md:hidden px-4 pb-3">
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => handleSearch(event.target.value)}
+            placeholder="Search campus listings"
+            aria-label="Search campus listings"
+            className="input-field py-2 text-sm bg-slate-100/70 border-transparent focus:bg-white"
+          />
+        </div>
       </header>
 
       {/* Chat Inbox Pop-up Modal */}
-      {showInbox && <ChatInbox onClose={() => setShowInbox(false)} />}
+      {showInbox && user && <ChatInbox key={user.id || user._id} onClose={() => setShowInbox(false)} />}
+      {showNotifications && user && <NotificationInbox key={user.id || user._id} onClose={() => setShowNotifications(false)} />}
     </>
   );
 };

@@ -1,13 +1,22 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { io } from 'socket.io-client';
-import { api, getProductId } from '../utils/api';
+import { api, getProductId, resolveSocketUrl } from '../utils/api';
 
 export const ShopContext = createContext(null);
 
-const CART_KEY = 'iitk_cart';
 const AUTH_KEY = 'iitk_auth';
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
+const GUEST_CART_KEY = 'iitk_cart_guest';
+const getUserId = (auth) => String(auth?.user?.id || auth?.user?._id || 'guest');
+const cartKeyFor = (auth) => `iitk_cart_${getUserId(auth)}`;
+
+const discardGuestCartStorage = () => {
+  try {
+    localStorage.removeItem(GUEST_CART_KEY);
+  } catch {
+    // ignore
+  }
+};
 
 const loadJSON = (key, fallback) => {
   try {
@@ -18,43 +27,102 @@ const loadJSON = (key, fallback) => {
   }
 };
 
+const loadCart = (key) => {
+  const stored = loadJSON(key, {});
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+  return Object.fromEntries(Object.entries(stored).filter(([, quantity]) => Number(quantity) > 0).map(([id]) => [id, 1]));
+};
+
 const ShopContextProvider = ({ children }) => {
   const [all_product, setAllProduct] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [cartItems, setCartItems] = useState(() => loadJSON(CART_KEY, {}));
   const [auth, setAuth] = useState(() => loadJSON(AUTH_KEY, null));
+  const [cartKey, setCartKey] = useState(() => cartKeyFor(loadJSON(AUTH_KEY, null)));
+  const [cartItems, setCartItems] = useState(() => loadCart(cartKeyFor(loadJSON(AUTH_KEY, null))));
+  const [cartProducts, setCartProducts] = useState({});
+  const [cartLoading, setCartLoading] = useState(() => Object.keys(loadCart(cartKeyFor(loadJSON(AUTH_KEY, null)))).length > 0);
+  const [productError, setProductError] = useState('');
+  const [productPage, setProductPage] = useState(1);
+  const productLimit = 20;
+  const [productTotal, setProductTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
-  const [hallFilter, setHallFilter] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [productFilters, setProductFilters] = useState({});
   const [socket, setSocket] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [onlineUsers, setOnlineUsers] = useState({});
   const [activeChat, setActiveChat] = useState(null);
 
   const token = auth?.token;
   const user = auth?.user;
+  const userId = getUserId(auth);
 
   const fetchProducts = useCallback(async (params = {}) => {
     setLoading(true);
+    setProductError('');
     try {
-      const query = new URLSearchParams(params).toString();
+      const queryParams = { page: productPage, limit: productLimit, ...params };
+      Object.keys(queryParams).forEach((key) => queryParams[key] === undefined && delete queryParams[key]);
+      const query = new URLSearchParams(queryParams).toString();
       const data = await api.get(`/products${query ? `?${query}` : ''}`);
-      const productsList = Array.isArray(data) ? data : data?.products || data?.data || [];
+      const productsList = Array.isArray(data) ? data : data?.products || [];
       setAllProduct(productsList);
+      setProductTotal(data?.total ?? productsList.length);
     } catch (err) {
-      console.error('Error fetching products:', err);
-      setAllProduct([]);
+      setProductError(err.message || 'Unable to load marketplace listings.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [productPage, productLimit]);
 
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+      setProductPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
-    localStorage.setItem(CART_KEY, JSON.stringify(cartItems));
-  }, [cartItems]);
+    fetchProducts({ ...productFilters, search: debouncedSearch || undefined });
+  }, [fetchProducts, debouncedSearch, productFilters]);
+
+  useEffect(() => {
+    const nextKey = cartKeyFor(auth);
+    const nextCart = loadCart(nextKey);
+    setCartKey(nextKey);
+    setCartProducts({});
+    setCartLoading(Object.keys(nextCart).length > 0);
+    setCartItems(nextCart);
+  }, [userId]);
+
+  useEffect(() => {
+    if (cartKey === cartKeyFor(auth)) localStorage.setItem(cartKey, JSON.stringify(cartItems));
+  }, [cartItems, cartKey, auth]);
+
+  useEffect(() => {
+    const ids = Object.keys(cartItems);
+    if (!ids.length) {
+      setCartProducts({});
+      setCartLoading(false);
+      return undefined;
+    }
+    let active = true;
+    setCartLoading(true);
+    Promise.all(ids.map(async (id) => {
+      try {
+        return [id, await api.get(`/products/${id}`)];
+      } catch {
+        return [id, null];
+      }
+    })).then((entries) => {
+      if (active) setCartProducts(Object.fromEntries(entries));
+    }).finally(() => {
+      if (active) setCartLoading(false);
+    });
+    return () => { active = false; };
+  }, [cartItems, userId]);
 
   useEffect(() => {
     if (auth) {
@@ -65,6 +133,18 @@ const ShopContextProvider = ({ children }) => {
   }, [auth]);
 
   useEffect(() => {
+    const clearExpiredSession = () => {
+      setAuth(null);
+      setActiveChat(null);
+      setUnreadCount(0);
+      setNotificationUnreadCount(0);
+      toast.error('Your session has expired. Please log in again.');
+    };
+    window.addEventListener('auth:expired', clearExpiredSession);
+    return () => window.removeEventListener('auth:expired', clearExpiredSession);
+  }, []);
+
+  useEffect(() => {
     if (!token) {
       setSocket(null);
       return undefined;
@@ -73,14 +153,19 @@ const ShopContextProvider = ({ children }) => {
     // Render hosts a persistent Socket.IO server for real-time chat.
     let s;
     try {
-      s = io(SOCKET_URL, { auth: { token }, transports: ['websocket', 'polling'] });
+      s = io(resolveSocketUrl(), { auth: { token }, transports: ['websocket', 'polling'] });
       s.on('connect', () => {
         api.get('/chat/unread', token).then((r) => setUnreadCount(r.count)).catch(() => {});
       });
 
       s.on('chat:notification', () => {
-        setUnreadCount((count) => count + 1);
+        api.get('/chat/unread', token).then((r) => setUnreadCount(r.count)).catch(() => {});
+        api.get('/notifications/unread-count', token).then((r) => setNotificationUnreadCount(r.count)).catch(() => {});
         toast('New message received', { icon: '💬' });
+      });
+
+      s.on('notification:new', () => {
+        api.get('/notifications/unread-count', token).then((r) => setNotificationUnreadCount(r.count)).catch(() => {});
       });
 
       s.on('user:online', ({ userId, online }) => {
@@ -92,18 +177,27 @@ const ShopContextProvider = ({ children }) => {
       console.warn('Socket connection failed');
     }
 
-    // Keep unread counts fresh if a socket reconnects after a network interruption.
-    const pollInterval = setInterval(() => {
-      api.get('/chat/unread', token).then((r) => setUnreadCount(r.count)).catch(() => {});
-    }, 5000);
-
     return () => {
       if (s) s.disconnect();
-      clearInterval(pollInterval);
     };
   }, [token]);
 
+  const refreshNotificationCount = useCallback(async () => {
+    if (!token) return setNotificationUnreadCount(0);
+    try {
+      const result = await api.get('/notifications/unread-count', token);
+      setNotificationUnreadCount(result.count);
+    } catch {
+      setNotificationUnreadCount(0);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    refreshNotificationCount();
+  }, [token]);
+
   const login = async (email, password) => {
+    discardGuestCartStorage();
     const data = await api.post('/auth/login', { email, password });
     setAuth(data);
     toast.success(`Welcome back, ${data.user?.name || 'IITKian'}!`);
@@ -111,6 +205,7 @@ const ShopContextProvider = ({ children }) => {
   };
 
   const register = async (form) => {
+    discardGuestCartStorage();
     const data = await api.post('/auth/register', form);
     setAuth(data);
     toast.success('Account created successfully!');
@@ -121,7 +216,6 @@ const ShopContextProvider = ({ children }) => {
     setAuth(null);
     setActiveChat(null);
     setUnreadCount(0);
-    localStorage.removeItem(AUTH_KEY);
     toast.success('Logged out');
   };
 
@@ -131,44 +225,74 @@ const ShopContextProvider = ({ children }) => {
   const resetPassword = ({ email, otp, newPassword }) =>
     api.post('/auth/reset-password', { email, otp, newPassword });
 
-  const addToCart = (itemId) => {
-    const product = all_product.find((p) => String(getProductId(p)) === String(itemId));
-    const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
-    const sellerId = String(product?.sellerId || '');
-
-    if (currentUserId && sellerId && currentUserId === sellerId) {
-      toast.error('You cannot add your own listed product to your cart.');
-      return;
+  const refreshUnreadCount = useCallback(async () => {
+    if (!token) return setUnreadCount(0);
+    try {
+      const result = await api.get('/chat/unread', token);
+      setUnreadCount(result.count);
+    } catch {
+      setUnreadCount(0);
     }
+  }, [token]);
 
-    setCartItems((prev) => {
-      const next = { ...prev, [itemId]: (prev[itemId] || 0) + 1 };
-      toast.success('Added to cart');
-      return next;
-    });
+  const addToCart = async (itemId) => {
+    try {
+      const product = await api.get(`/products/${itemId}`);
+      if (product.status !== 'available') {
+        toast.error('This listing is no longer available.');
+        return;
+      }
+      if (product.seedKey) {
+        toast.error('Sample listings are available for browsing only.');
+        return;
+      }
+      const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
+      if (currentUserId && String(product.sellerId) === currentUserId) {
+        toast.error('You cannot add your own listed product to your cart.');
+        return;
+      }
+      setCartProducts((previous) => ({ ...previous, [itemId]: product }));
+      setCartItems((previous) => {
+        if (previous[itemId]) return previous;
+        toast.success('Added to cart');
+        return { ...previous, [itemId]: 1 };
+      });
+    } catch (error) {
+      toast.error(error.message || 'Unable to confirm this listing.');
+    }
   };
 
   const removeFromCart = (itemId) => {
     setCartItems((prev) => {
       const next = { ...prev };
-      if (next[itemId] > 1) next[itemId] -= 1;
-      else delete next[itemId];
+      delete next[itemId];
       return next;
     });
   };
 
   const clearCart = () => setCartItems({});
 
-  const getCartCount = () => Object.values(cartItems).reduce((sum, qty) => sum + qty, 0);
+  const cartReady = cartKey === cartKeyFor(auth);
+  const getCartCount = () => cartReady ? Object.keys(cartItems).length : 0;
 
   const getCartTotal = () =>
-    Object.entries(cartItems).reduce((total, [id, qty]) => {
+    cartReady ? Object.keys(cartItems).reduce((total, id) => {
       const product = all_product.find((p) => String(getProductId(p)) === String(id));
-      return total + (product?.new_price || 0) * qty;
-    }, 0);
+      const currentProduct = Object.hasOwn(cartProducts, id) ? cartProducts[id] : product;
+      return total + (currentProduct?.status === 'available' ? Number(currentProduct.new_price || 0) : 0);
+    }, 0) : 0;
 
   const reserveProduct = async (productId) => {
-    const product = all_product.find((p) => String(getProductId(p)) === String(productId));
+    if (!token) {
+      const error = new Error('Please sign in to continue.');
+      error.code = 'AUTH_REQUIRED';
+      throw error;
+    }
+    const product = all_product.find((p) => String(getProductId(p)) === String(productId))
+      || cartProducts[productId];
+    if (product?.seedKey) {
+      throw new Error('Sample listings are available for browsing only.');
+    }
     const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
     if (currentUserId && String(product?.sellerId) === currentUserId) {
       toast.error('You cannot reserve your own product.');
@@ -178,8 +302,36 @@ const ShopContextProvider = ({ children }) => {
     setAllProduct((prev) =>
       prev.map((p) => (String(getProductId(p)) === String(productId) ? updated : p))
     );
+    removeFromCart(productId);
     toast.success('Item reserved for 24 hours!');
     return updated;
+  };
+
+  const reserveCartItems = async () => {
+    if (!token) {
+      const error = new Error('Please sign in to continue.');
+      error.code = 'AUTH_REQUIRED';
+      throw error;
+    }
+    const ids = [...Object.keys(cartItems)];
+    if (!ids.length) return { reserved: [], failed: [] };
+    const reserved = [];
+    const failed = [];
+    for (const id of ids) {
+      try {
+        const live = await api.get(`/products/${id}`, token);
+        if (live.status !== 'available') {
+          failed.push({ id, message: 'This item is no longer available.' });
+          removeFromCart(id);
+          continue;
+        }
+        await reserveProduct(id);
+        reserved.push(id);
+      } catch (err) {
+        failed.push({ id, message: err.message || 'Unable to reserve this item.' });
+      }
+    }
+    return { reserved, failed };
   };
 
   const updateProductStatus = async (productId, status) => {
@@ -194,19 +346,25 @@ const ShopContextProvider = ({ children }) => {
   const deleteProduct = async (productId) => {
     await api.delete(`/products/${productId}`, token);
     setAllProduct((prev) => prev.filter((p) => String(getProductId(p)) !== String(productId)));
-    toast.success('Listing removed');
   };
 
   const createProduct = async (productData) => {
     const created = await api.post('/products', productData, token);
     setAllProduct((prev) => [created, ...prev]);
-    toast.success('Listing created!');
     return created;
+  };
+
+  const updateProduct = async (productId, productData) => {
+    const updated = await api.patch(`/products/${productId}`, productData, token);
+    setAllProduct((previous) => previous.map((product) =>
+      String(getProductId(product)) === String(productId) ? updated : product
+    ));
+    return updated;
   };
 
   const openChat = (product, sellerId, sellerName = product?.sellerName || 'Seller', productId = product ? getProductId(product) : '') => {
     if (!auth) {
-      toast.error('Please login to message seller');
+      toast.error('Please sign in to message the seller.');
       return;
     }
 
@@ -237,7 +395,6 @@ const ShopContextProvider = ({ children }) => {
       sellerName,
       productId: productId || getProductId(resolvedProduct),
     });
-    setUnreadCount((count) => Math.max(0, count - 1));
   };
 
   const closeChat = () => setActiveChat(null);
@@ -247,52 +404,46 @@ const ShopContextProvider = ({ children }) => {
 
     const productId = String(activeChat.productId || getProductId(activeChat.product));
     if (socket?.connected) {
-      socket.emit('chat:send', {
-        receiverId: activeChat.sellerId,
-        productId,
-        text,
-        product: {
-          id: productId,
-          name: activeChat.product.name,
-          new_price: activeChat.product.new_price,
-          status: activeChat.product.status,
-          image: activeChat.product.image,
-        },
+      return new Promise((resolve, reject) => {
+        socket.timeout(10000).emit('chat:send', {
+          receiverId: activeChat.sellerId,
+          productId,
+          text,
+        }, (timeoutError, response) => {
+          if (timeoutError) return reject(new Error('Message send timed out.'));
+          if (!response?.success) return reject(new Error(response?.error || 'Failed to send message.'));
+          return resolve(response.message);
+        });
       });
-      return;
     }
 
     // Temporary HTTP fallback while a socket reconnects.
-    try {
-      await api.post('/chat/send', {
-        receiverId: activeChat.sellerId,
-        productId,
-        text,
-        product: {
-          id: productId,
-          name: activeChat.product.name,
-          new_price: activeChat.product.new_price,
-          status: activeChat.product.status,
-          image: activeChat.product.image,
-        },
-      }, token);
-    } catch (err) {
-      toast.error('Failed to send message');
-      console.error(err);
-    }
+    return api.post('/chat/send', {
+      receiverId: activeChat.sellerId,
+      productId,
+      text,
+    }, token);
   };
 
   const value = useMemo(
     () => ({
       all_product,
       loading,
+      productError,
+      productPage,
+      productLimit,
+      productTotal,
+      setProductPage,
       cartItems,
+      cartProducts,
+      cartLoading,
+      cartReady,
       auth,
       user,
       searchQuery,
       setSearchQuery,
-      hallFilter,
-      setHallFilter,
+      setProductFilters,
+      productFilters,
       fetchProducts,
       login,
       register,
@@ -307,11 +458,16 @@ const ShopContextProvider = ({ children }) => {
       getCartCount,
       getCartTotal,
       reserveProduct,
+      reserveCartItems,
       updateProductStatus,
       deleteProduct,
       createProduct,
+      updateProduct,
       socket,
       unreadCount,
+      notificationUnreadCount,
+      refreshNotificationCount,
+      refreshUnreadCount,
       onlineUsers,
       activeChat,
       openChat,
@@ -319,7 +475,7 @@ const ShopContextProvider = ({ children }) => {
       sendMessage,
       token,
     }),
-    [all_product, loading, cartItems, auth, user, searchQuery, hallFilter, fetchProducts, token, socket, unreadCount, onlineUsers, activeChat]
+    [all_product, loading, productError, productPage, productLimit, productTotal, cartItems, cartProducts, cartLoading, cartReady, auth, user, searchQuery, productFilters, fetchProducts, token, socket, unreadCount, notificationUnreadCount, refreshNotificationCount, refreshUnreadCount, onlineUsers, activeChat]
   );
 
   return <ShopContext.Provider value={value}>{children}</ShopContext.Provider>;

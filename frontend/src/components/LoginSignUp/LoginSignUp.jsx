@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useShop } from '../../context/ShopContext';
@@ -9,10 +9,12 @@ import iitkLogo from '../../assets/iitk_logo.jpeg';
 const LoginSignUpComponent = () => {
   const { login, register, requestOTP, verifyOTP } = useShop();
   const navigate = useNavigate();
+  const location = useLocation();
   const [mode, setMode] = useState('login');
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -24,7 +26,21 @@ const LoginSignUpComponent = () => {
 
   const isIITKEmail = form.email.toLowerCase().trim().endsWith('@iitk.ac.in');
 
-  const handleChange = (e) => setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = setInterval(() => setResendCooldown((seconds) => Math.max(0, seconds - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+    if (name === 'email') {
+      setOtpSent(false);
+      setOtpVerified(false);
+      setForm((prev) => ({ ...prev, otp: '' }));
+    }
+  };
 
   const handleSendOTP = async () => {
     if (!isIITKEmail) {
@@ -33,11 +49,12 @@ const LoginSignUpComponent = () => {
     }
     setLoading(true);
     try {
-      await requestOTP(form.email);
+      const result = await requestOTP(form.email);
       setOtpSent(true);
-      toast.success('OTP sent to your IITK webmail!');
+      setResendCooldown(Number(result?.cooldownSeconds) || 60);
+      toast.success('If your email is eligible, a code was sent to your IITK webmail.');
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message || 'Failed to send OTP';
+      const errorMessage = err.message || 'Failed to send OTP';
       
       // Auto-switch mode to login if user already exists
       if (errorMessage.toLowerCase().includes('already exists') || errorMessage.toLowerCase().includes('registered')) {
@@ -62,7 +79,7 @@ const LoginSignUpComponent = () => {
       setOtpVerified(true);
       toast.success('Email verified successfully!');
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message || 'Invalid OTP';
+      const errorMessage = err.message || 'Invalid OTP';
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -86,9 +103,9 @@ const LoginSignUpComponent = () => {
       } else {
         await register(form);
       }
-      navigate('/');
+      navigate(location.state?.from || '/', { replace: true });
     } catch (err) {
-      const errorMessage = err.response?.data?.message || err.message || 'Authentication failed';
+      const errorMessage = err.message || 'Authentication failed';
       toast.error(errorMessage);
     } finally {
       setLoading(false);
@@ -112,7 +129,7 @@ const LoginSignUpComponent = () => {
             {mode === 'login' ? 'Welcome Back' : 'Join IITK Campus Marketplace'}
           </h1>
           <p className="text-slate-500 text-xs mt-1.5">
-            Verified @iitk.ac.in webmail accounts only
+            Sign in with your IITK campus email to list, reserve, and message sellers
           </p>
         </div>
 
@@ -200,7 +217,23 @@ const LoginSignUpComponent = () => {
                   </button>
                 )}
               </div>
-              {otpVerified && <p className="text-xs text-emerald-600 font-semibold">✓ IITK Webmail Verified</p>}
+              {otpSent && !otpVerified && (
+                <p className="text-xs text-slate-500">
+                  {resendCooldown > 0 ? (
+                    <>Didn&apos;t receive the code? Resend available in {resendCooldown}s</>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSendOTP}
+                      disabled={loading}
+                      className="text-royal font-semibold hover:underline disabled:opacity-50"
+                    >
+                      Resend OTP
+                    </button>
+                  )}
+                </p>
+              )}
+              {otpVerified && <p className="text-xs text-emerald-600 font-semibold">Email verified — you can create your account.</p>}
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="relative">
@@ -234,9 +267,10 @@ const LoginSignUpComponent = () => {
                 type="password"
                 value={form.password}
                 onChange={handleChange}
-                placeholder="Password (min 6 characters)"
+                placeholder="Password (8+ characters, letters and numbers)"
                 required
-                minLength={6}
+                minLength={8}
+                maxLength={128}
                 className="input-field text-sm"
               />
             </div>

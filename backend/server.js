@@ -1,7 +1,7 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { createServer } from 'http';
@@ -14,58 +14,59 @@ import productRouter from './routes/products.js';
 import chatRouter from './routes/chat.js';
 import notificationRouter from './routes/notifications.js';
 import { setupSocketHandlers } from './socket/chatSocket.js';
-import { logger, reportError } from './utils/logger.js';
+import { logger } from './utils/logger.js';
 import { rateLimitMiddleware } from './middleware/rateLimit.js';
-
-dotenv.config();
+import { validateJWTConfig } from './middleware/auth.js';
+import { isMailerConfigured } from './services/mailer.js';
 
 export const app = express();
 export const httpServer = createServer(app);
 
+const isProduction = process.env.NODE_ENV === 'production';
 const allowedOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
   .map((origin) => {
-    try {
-      return new URL(origin.trim()).origin;
-    } catch {
-      return origin.trim();
-    }
-  })
-  .filter(Boolean);
+    if (isProduction) {
+      if (!URL.canParse(origin)) {
+        throw new Error('FRONTEND_URL must contain valid HTTPS origins separated by commas.');
+      }
 
+      const parsed = new URL(origin);
+      if (parsed.protocol !== 'https:') {
+        throw new Error('FRONTEND_URL must contain valid HTTPS origins separated by commas.');
+      }
+      return parsed.origin;
+    }
+
+    if (!URL.canParse(origin)) return origin;
+    const parsed = new URL(origin);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.origin : origin;
+  });
+if (!isProduction && allowedOrigins.length === 0) {
+  allowedOrigins.push('http://localhost:5173', 'http://127.0.0.1:5173');
+}
+const allowOrigin = (origin, callback) => {
+  if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+  return callback(new Error('Origin is not allowed by CORS'));
+};
+
+app.set('trust proxy', process.env.NODE_ENV === 'production' ? 1 : false);
 app.use(cors({
-  origin(origin, callback) {
-    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) return callback(null, true);
-    return callback(new Error('Origin is not allowed by CORS'));
-  },
+  origin: allowOrigin,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(rateLimitMiddleware);
 
 const io = new Server(httpServer, {
-  cors: { origin: allowedOrigins.length ? allowedOrigins : true, credentials: true },
+  cors: { origin: allowOrigin, credentials: true },
 });
 app.set('onlineUsers', setupSocketHandlers(io));
 app.use((req, res, next) => { req.io = io; next(); });
-
-// Connect to MongoDB (falls back to in-memory mode if unavailable)
-connectDB()
-  .then((connected) => {
-    if (connected) {
-      logger.info('Connected to MongoDB successfully', 'db');
-    } else {
-      logger.info('Running in memory mode (MongoDB unavailable)', 'db');
-    }
-  })
-  .catch((err) => {
-    logger.error('MongoDB connection error', 'db', err);
-  });
-
 
 const imagesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public', 'public', 'images');
 if (fs.existsSync(imagesDir)) {
@@ -92,17 +93,26 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/ready', async (req, res) => {
-  const ready = mongoose.connection.readyState === 1;
+const readinessHandler = (req, res) => {
+  const databaseReady = mongoose.connection.readyState === 1;
+  const configurationReady = !isProduction || (
+    Boolean(process.env.JWT_SECRET) && Boolean(process.env.FRONTEND_URL) && isMailerConfigured()
+  );
+  const ready = databaseReady && configurationReady;
   res.status(ready ? 200 : 503).json({
     ready,
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    database: databaseReady ? 'connected' : 'disconnected',
+    configuration: configurationReady ? 'valid' : 'incomplete',
     timestamp: new Date().toISOString(),
   });
-});
+};
+app.get('/ready', readinessHandler);
+app.get('/readiness', readinessHandler);
 
+app.use('/api/products', express.json({ limit: '8mb' }), productRouter);
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ limit: '1mb', extended: true }));
 app.use('/api/auth', authRouter);
-app.use('/api/products', productRouter);
 app.use('/api/chat', chatRouter);
 app.use('/api/notifications', notificationRouter);
 
@@ -111,22 +121,40 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  reportError('Unhandled application error', 'server', err);
-  res.status(err.status || 500).json({
-    message: err.message || 'Internal server error',
-  });
+  logger.error('Unhandled application error', 'server', err);
+  let status = 500;
+  let message = 'Internal server error.';
+
+  if (err.status === 413 || err.code === 'LIMIT_FILE_SIZE') {
+    status = 413;
+    message = 'Request payload is too large.';
+  } else if (err.status === 400 || err.name === 'MulterError') {
+    status = 400;
+    message = 'Request payload is invalid.';
+  }
+
+  res.status(status).json({ message });
 });
 
 const PORT = process.env.PORT || 5000;
 
-export const startServer = (port = PORT) => {
+export const startServer = async (port = PORT) => {
+  if (isProduction) {
+    validateJWTConfig();
+    if (!process.env.MONGO_URI) throw new Error('MONGO_URI is required in production.');
+    if (!allowedOrigins.length) throw new Error('FRONTEND_URL must explicitly list allowed production origins.');
+  }
+  await connectDB();
   return httpServer.listen(port, '0.0.0.0', () => {
     logger.info(`Server running on http://0.0.0.0:${port}`, 'server');
   });
 };
 
 if (process.argv[1] && process.argv[1].endsWith('server.js')) {
-  startServer();
+  startServer().catch((error) => {
+    logger.error('Server startup failed', 'server', error);
+    process.exitCode = 1;
+  });
 }
 
 export default app;

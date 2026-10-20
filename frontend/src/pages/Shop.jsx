@@ -1,29 +1,12 @@
 import Hero from '../components/Hero/Hero';
 import Item from '../components/Item/Item';
 import { useShop } from '../context/ShopContext';
-import { useMemo } from 'react';
-
-const getUploadedAt = (product) => {
-  const raw = product?.createdAt || product?.updatedAt || product?.date || product?.publishedAt;
-  if (!raw) return 0;
-  return new Date(raw).getTime() || 0;
-};
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 const Shop = () => {
-  const { all_product, searchQuery } = useShop();
-
-  const filteredProducts = useMemo(() => {
-    const baseProducts = searchQuery
-      ? all_product.filter(
-          (p) =>
-            p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.hall?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : all_product;
-
-    return [...baseProducts].sort((a, b) => getUploadedAt(b) - getUploadedAt(a));
-  }, [all_product, searchQuery]);
+  const { all_product, searchQuery, loading, productError, productPage, productLimit, productTotal, setProductPage, fetchProducts } = useShop();
+  const pageCount = Math.max(1, Math.ceil(productTotal / productLimit));
+  const products = all_product;
 
   return (
     <div>
@@ -39,7 +22,14 @@ const Shop = () => {
           </div>
         </div>
 
-        {filteredProducts.length === 0 ? (
+        {productError ? (
+          <div role="alert" className="text-center py-16 glass-card">
+            <p className="text-rose-700">{productError}</p>
+            <button onClick={() => fetchProducts({ search: searchQuery.trim() || undefined })} className="btn-secondary mt-4">Retry</button>
+          </div>
+        ) : loading ? (
+          <div className="text-center py-16 text-slate-500" role="status">Loading listings...</div>
+        ) : products.length === 0 ? (
           <div className="text-center py-16 glass-card">
             <p className="text-slate-500">
               {searchQuery
@@ -49,10 +39,27 @@ const Shop = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {filteredProducts.map((item) => (
+            {products.map((item) => (
               <Item key={item._id || item.id} product={item} />
             ))}
           </div>
+        )}
+        {!productError && productTotal > productLimit && (
+          <nav aria-label="Product pages" className="mt-8 flex items-center justify-center gap-4">
+            <button
+              type="button"
+              disabled={productPage <= 1 || loading}
+              onClick={() => setProductPage((page) => Math.max(1, page - 1))}
+              className="btn-secondary inline-flex items-center gap-1 disabled:opacity-40"
+            ><ChevronLeft size={16} /> Previous</button>
+            <span className="text-sm text-slate-600">Page {productPage} of {pageCount}</span>
+            <button
+              type="button"
+              disabled={productPage >= pageCount || loading}
+              onClick={() => setProductPage((page) => Math.min(pageCount, page + 1))}
+              className="btn-secondary inline-flex items-center gap-1 disabled:opacity-40"
+            >Next <ChevronRight size={16} /></button>
+          </nav>
         )}
       </div>
     </div>

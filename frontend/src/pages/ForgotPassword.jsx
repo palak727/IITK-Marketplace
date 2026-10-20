@@ -28,10 +28,8 @@ const ForgotPassword = () => {
     }
     setLoading(true);
     try {
-      if (requestResetOTP) {
-        await requestResetOTP(email);
-      }
-      toast.success('Reset OTP sent to your IITK webmail!');
+      const result = await requestResetOTP(email);
+      toast.success(result?.message || 'If the account exists, a reset code will be sent when email delivery is available.');
       setStep(2);
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.message || 'Failed to send OTP';
@@ -48,8 +46,8 @@ const ForgotPassword = () => {
       toast.error('Please enter the OTP');
       return;
     }
-    if (newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters long');
+    if (newPassword.length < 8 || newPassword.length > 128 || !/[A-Za-z]/.test(newPassword) || !/\d/.test(newPassword)) {
+      toast.error('Password must be 8-128 characters and include letters and numbers.');
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -136,7 +134,7 @@ const ForgotPassword = () => {
                   type="text"
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
-                  placeholder="Enter OTP sent to your email"
+                  placeholder="Enter the 6-digit code if it arrives"
                   required
                   className="input-field pl-10 text-sm"
                 />
@@ -151,9 +149,10 @@ const ForgotPassword = () => {
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Min 6 characters"
+                  placeholder="8+ characters with letters and numbers"
                   required
-                  minLength={6}
+                  minLength={8}
+                  maxLength={128}
                   className="input-field pl-10 text-sm"
                 />
               </div>

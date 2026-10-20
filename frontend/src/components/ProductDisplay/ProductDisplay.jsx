@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ShoppingCart, MessageCircle, Bookmark, MapPin, Tag, AlertCircle, ShieldCheck, ImageOff } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ShoppingCart, MessageCircle, Bookmark, MapPin, Tag, AlertCircle, ImageOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import LazyImage from '../LazyImage/LazyImage';
 import { useShop } from '../../context/ShopContext';
@@ -8,18 +9,20 @@ import { formatPrice, getProductId, getStatusBadge } from '../../utils/api';
 
 const ProductDisplay = ({ product }) => {
   const { auth, addToCart, reserveProduct, openChat } = useShop();
+  const navigate = useNavigate();
   const [selectedImage, setSelectedImage] = useState(0);
   const [reserving, setReserving] = useState(false);
 
-  const images = [];
-  if (product.image) images.push(product.image);
-  if (Array.isArray(product.images)) {
-    product.images.forEach((img) => {
-      if (img && !images.includes(img)) {
-        images.push(img);
-      }
-    });
-  }
+  const images = useMemo(() => {
+    const normalized = [];
+    if (product.image) normalized.push(product.image);
+    if (Array.isArray(product.images)) {
+      product.images.forEach((img) => {
+        if (img && !normalized.includes(img)) normalized.push(img);
+      });
+    }
+    return normalized;
+  }, [product.image, product.images]);
 
   useEffect(() => {
     if (images.length <= 1) return undefined;
@@ -32,6 +35,7 @@ const ProductDisplay = ({ product }) => {
   const badge = getStatusBadge(product.status);
   const productId = getProductId(product);
   const isAvailable = product.status === 'available';
+  const isSampleListing = Boolean(product.seedKey);
 
   const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
   const sellerId = String(product?.sellerId || '');
@@ -39,7 +43,8 @@ const ProductDisplay = ({ product }) => {
 
   const handleReserve = async () => {
     if (!auth) {
-      toast.error('Please login with your @iitk.ac.in webmail to reserve items');
+      toast.error('Please sign in to reserve this item.');
+      navigate('/login', { state: { from: `/product/${productId}` } });
       return;
     }
     setReserving(true);
@@ -54,7 +59,8 @@ const ProductDisplay = ({ product }) => {
 
   const handleMessage = () => {
     if (!auth) {
-      toast.error('Please login to message seller');
+      toast.error('Please sign in to message the seller.');
+      navigate('/login', { state: { from: `/product/${productId}` } });
       return;
     }
     openChat(product, product.sellerId || 'senior-1');
@@ -99,9 +105,6 @@ const ProductDisplay = ({ product }) => {
           <span className={`text-xs font-bold px-3 py-1 rounded-full ${badge.className}`}>{badge.label}</span>
           <span className="text-xs font-bold text-royal uppercase tracking-wider bg-blue-50 px-3 py-1 rounded-full">
             {product.category}
-          </span>
-          <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full flex items-center gap-1">
-            <ShieldCheck size={14} /> IITK Verified
           </span>
         </div>
 
@@ -155,14 +158,18 @@ const ProductDisplay = ({ product }) => {
           </div>
         )}
 
-        {isOwner ? (
+        {isSampleListing ? (
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 font-semibold text-center">
+            Sample listing for browsing only. It is not linked to an active seller.
+          </div>
+        ) : isOwner ? (
           <div className="p-4 rounded-xl bg-blue-50 border border-blue-200 text-royal font-semibold text-center">
             This is your active listing. You cannot buy, reserve, or chat with yourself about it.
           </div>
         ) : (
           <div className="flex flex-col sm:flex-row gap-3">
             <button
-              onClick={() => addToCart(productId)}
+              onClick={() => addToCart(productId, product)}
               disabled={!isAvailable}
               className="btn-primary flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -175,7 +182,7 @@ const ProductDisplay = ({ product }) => {
               className="btn-secondary flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Bookmark size={18} />
-              {reserving ? 'Reserving...' : 'Reserve & Collect (24h)'}
+              {reserving ? 'Reserving...' : 'Reserve (24h hold)'}
             </button>
             <button
               onClick={handleMessage}

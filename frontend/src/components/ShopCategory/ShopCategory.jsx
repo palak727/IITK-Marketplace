@@ -1,15 +1,24 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Filter, Tag } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Filter, Tag } from 'lucide-react';
 import Item from '../Item/Item';
 import { HALLS, CONDITIONS } from '../../utils/api';
+import { useShop } from '../../context/ShopContext';
 
 const ShopCategoryComponent = ({
   categoryName = 'all',
   products = [], // Default empty array prevents .filter() crash when loading
   categoryTitle = 'Campus Listings',
   bannerDesc = 'Explore items available across IIT Kanpur campus',
+  loading = false,
+  error = '',
+  page = 1,
+  limit = 20,
+  total = 0,
+  onPageChange,
+  onRetry,
 }) => {
+  const { setProductFilters } = useShop();
   const [selectedHall, setSelectedHall] = useState('all');
   const [selectedCondition, setSelectedCondition] = useState('all');
   const [sortBy, setSortBy] = useState('newest');
@@ -17,20 +26,17 @@ const ShopCategoryComponent = ({
   // Ensure products is always an array before filtering
   const safeProducts = Array.isArray(products) ? products : [];
 
-  let filtered = safeProducts.filter((p) => {
-    if (categoryName && categoryName !== 'all') {
-      if (p.category?.toLowerCase() !== categoryName.toLowerCase()) return false;
-    }
-    if (selectedHall !== 'all' && p.hall !== selectedHall) return false;
-    if (selectedCondition !== 'all' && p.condition !== selectedCondition) return false;
-    return true;
-  });
+  useEffect(() => {
+    setProductFilters({
+      category: categoryName && categoryName !== 'all' ? categoryName : undefined,
+      hall: selectedHall === 'all' ? undefined : selectedHall,
+      condition: selectedCondition === 'all' ? undefined : selectedCondition,
+      sort: sortBy,
+    });
+    return () => setProductFilters({});
+  }, [categoryName, selectedHall, selectedCondition, sortBy, setProductFilters]);
 
-  if (sortBy === 'price-low') {
-    filtered.sort((a, b) => (a.new_price || 0) - (b.new_price || 0));
-  } else if (sortBy === 'price-high') {
-    filtered.sort((a, b) => (b.new_price || 0) - (a.new_price || 0));
-  }
+  const pageCount = Math.max(1, Math.ceil(total / limit));
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -55,7 +61,7 @@ const ShopCategoryComponent = ({
           <div className="relative">
             <select
               value={selectedHall}
-              onChange={(e) => setSelectedHall(e.target.value)}
+              onChange={(e) => { setSelectedHall(e.target.value); onPageChange(1); }}
               className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-navy focus:outline-none focus:ring-2 focus:ring-royal/30"
             >
               <option value="all">All Halls of Residence</option>
@@ -71,7 +77,7 @@ const ShopCategoryComponent = ({
           <div className="relative">
             <select
               value={selectedCondition}
-              onChange={(e) => setSelectedCondition(e.target.value)}
+              onChange={(e) => { setSelectedCondition(e.target.value); onPageChange(1); }}
               className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-navy focus:outline-none focus:ring-2 focus:ring-royal/30"
             >
               <option value="all">All Condition Grades</option>
@@ -89,7 +95,7 @@ const ShopCategoryComponent = ({
           <span className="text-xs font-semibold text-slate-500">Sort by:</span>
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
+            onChange={(e) => { setSortBy(e.target.value); onPageChange(1); }}
             className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 text-navy focus:outline-none focus:ring-2 focus:ring-royal/30"
           >
             <option value="newest">Recently Listed</option>
@@ -100,7 +106,14 @@ const ShopCategoryComponent = ({
       </div>
 
       {/* Products Grid */}
-      {filtered.length === 0 ? (
+      {error ? (
+        <div role="alert" className="text-center py-16 glass-card">
+          <p className="text-rose-700">{error}</p>
+          <button onClick={() => onRetry({ category: categoryName, page, limit })} className="btn-secondary mt-4">Retry</button>
+        </div>
+      ) : loading ? (
+        <div role="status" className="text-center py-16 text-slate-500">Loading listings...</div>
+      ) : safeProducts.length === 0 ? (
         <div className="text-center py-16 glass-card rounded-2xl">
           <Tag size={48} className="mx-auto text-slate-300 mb-3" />
           <p className="font-bold text-navy text-lg mb-1">No items found</p>
@@ -108,10 +121,17 @@ const ShopCategoryComponent = ({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-          {filtered.map((item) => (
+          {safeProducts.map((item) => (
             <Item key={item._id || item.id} product={item} />
           ))}
         </div>
+      )}
+      {!error && total > limit && (
+        <nav aria-label="Product pages" className="mt-8 flex items-center justify-center gap-4">
+          <button type="button" disabled={page <= 1 || loading} onClick={() => onPageChange((value) => Math.max(1, value - 1))} className="btn-secondary inline-flex items-center gap-1 disabled:opacity-40"><ChevronLeft size={16} /> Previous</button>
+          <span className="text-sm text-slate-600">Page {page} of {pageCount}</span>
+          <button type="button" disabled={page >= pageCount || loading} onClick={() => onPageChange((value) => Math.min(pageCount, value + 1))} className="btn-secondary inline-flex items-center gap-1 disabled:opacity-40">Next <ChevronRight size={16} /></button>
+        </nav>
       )}
     </div>
   );

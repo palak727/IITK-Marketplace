@@ -14,7 +14,3 @@ export const logger = {
     );
   },
 };
-
-export const reportError = (message, context, error) => {
-  logger.error(message, context, error);
-};

@@ -2,5 +2,9 @@
   "name": "iitk-marketplace-monorepo",
   "version": "1.0.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "test": "npm --prefix backend test",
+    "build": "npm --prefix frontend run build"
+  }
 }
