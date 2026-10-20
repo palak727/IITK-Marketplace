@@ -63,7 +63,7 @@ This adds sample listings to the database. You can run the command again without
 npm start
 ```
 
-The backend runs at [http://localhost:5000](http://localhost:5000).
+The backend runs at [https://iitk-marketplace.onrender.com/](https://iitk-marketplace.onrender.com/).
 
 ### 4. Start the frontend
 
@@ -75,7 +75,7 @@ npm install
 npm run dev
 ```
 
-The frontend runs at [http://localhost:5173](http://localhost:5173).
+The frontend runs at [https://iitk-marketplace-lrey.vercel.app/](https://iitk-marketplace-lrey.vercel.app/).
 
 ### 5. Run tests and build the frontend
 

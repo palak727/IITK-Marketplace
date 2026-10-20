@@ -1,6 +1,6 @@
 export const createRateLimiter = ({
   windowMs = 60 * 1000,
-  maxRequests = 200,
+  maxRequests = 100,
   message = 'Too many requests. Please try again shortly.',
 } = {}) => {
   const requests = new Map();

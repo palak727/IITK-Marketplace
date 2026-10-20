@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nodemon server.js",
+    "dev": "node --watch server.js",
     "start": "node server.js",
     "test": "node --test tests/*.test.js",
     "seed": "node seed.js"
@@ -19,14 +19,11 @@
     "googleapis": "^182.0.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.5.1",
-    "multer": "^2.3.0",
-    "sharp": "^0.35.4",
-    "socket.io": "^4.7.5"
+    "multer": "^2.4.0",
+    "sharp": "^0.35.5",
+    "socket.io": "^4.8.4"
   },
   "overrides": {
     "qs": "^6.16.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.4"
   }
 }
