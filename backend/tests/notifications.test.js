@@ -14,11 +14,11 @@ test('notifications are recipient-scoped and event creation is idempotent', asyn
   resetMongo();
   const event = {
     recipientId: 'recipient-a', senderId: 'sender', type: 'product',
-    message: 'A buyer reserved your listing.', productId: 'product-a', eventKey: 'reservation:product-a:123',
+    message: 'A listing you discussed has been marked sold.', productId: 'product-a', eventKey: 'sold:product-a:123',
   };
   await createNotification(event);
   await createNotification(event);
-  await createNotification({ ...event, recipientId: 'recipient-b', eventKey: 'reservation:product-b:456' });
+  await createNotification({ ...event, recipientId: 'recipient-b', eventKey: 'sold:product-b:456' });
   assert.equal(mongoCollections.Notification.length, 2);
 
   const own = response();

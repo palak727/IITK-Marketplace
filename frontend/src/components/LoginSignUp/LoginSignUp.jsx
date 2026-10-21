@@ -52,7 +52,7 @@ const LoginSignUpComponent = () => {
       const result = await requestOTP(form.email);
       setOtpSent(true);
       setResendCooldown(Number(result?.cooldownSeconds) || 60);
-      toast.success('If your email is eligible, a code was sent to your IITK webmail.');
+      toast.success('Check your email for the verification code.');
     } catch (err) {
       const errorMessage = err.message || 'Failed to send OTP';
       
@@ -129,7 +129,7 @@ const LoginSignUpComponent = () => {
             {mode === 'login' ? 'Welcome Back' : 'Join IITK Campus Marketplace'}
           </h1>
           <p className="text-slate-500 text-xs mt-1.5">
-            Sign in with your IITK campus email to list, reserve, and message sellers
+            Sign in with your IITK campus email to list items and chat with sellers
           </p>
         </div>
 

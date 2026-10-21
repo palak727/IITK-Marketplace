@@ -82,7 +82,19 @@ export const api = {
     return res.data;
   },
 
+  postMultipart: async (endpoint, body, token) => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await apiClient.post(endpoint, body, { headers });
+    return res.data;
+  },
+
   patch: async (endpoint, body, token) => {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await apiClient.patch(endpoint, body, { headers });
+    return res.data;
+  },
+
+  patchMultipart: async (endpoint, body, token) => {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     const res = await apiClient.patch(endpoint, body, { headers });
     return res.data;
@@ -94,16 +106,6 @@ export const api = {
     return res.data;
   },
 
-  upload: async (file, token) => {
-    const formData = new FormData();
-    formData.append('image', file);
-    const headers = {
-      'Content-Type': 'multipart/form-data',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
-    const res = await apiClient.post('/products/upload', formData, { headers });
-    return res.data.url;
-  },
 };
 
 export const formatPrice = (amount) => {
@@ -123,8 +125,6 @@ export const getStatusBadge = (status) => {
   switch (status) {
     case 'available':
       return { label: 'Available', className: 'bg-emerald-100 text-emerald-800 border border-emerald-300' };
-    case 'reserved':
-      return { label: 'Reserved (24h)', className: 'bg-amber-100 text-amber-800 border border-amber-300' };
     case 'sold':
       return { label: 'Sold Out', className: 'bg-rose-100 text-rose-800 border border-rose-300' };
     default:

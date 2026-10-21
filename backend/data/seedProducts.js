@@ -129,7 +129,7 @@ export const seedProducts = [
     hall: 'Hall 5',
     condition: 'Barely Used',
     defects: ['Professionally dry-cleaned', 'Anti-sag core intact'],
-    status: 'reserved',
+    status: 'available',
     sellerName: 'Priya Verma (Y22)',
   },
 

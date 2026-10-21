@@ -1,7 +1,8 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { io } from 'socket.io-client';
 import { api, getProductId, resolveSocketUrl } from '../utils/api';
+import { addItemToCart } from './cartState';
 
 export const ShopContext = createContext(null);
 
@@ -9,6 +10,17 @@ const AUTH_KEY = 'iitk_auth';
 const GUEST_CART_KEY = 'iitk_cart_guest';
 const getUserId = (auth) => String(auth?.user?.id || auth?.user?._id || 'guest');
 const cartKeyFor = (auth) => `iitk_cart_${getUserId(auth)}`;
+const listingFormData = (listing, files) => {
+  const formData = new FormData();
+  Object.entries(listing).forEach(([key, value]) => {
+    if (value === undefined || value === null) return;
+    if (key === 'images') formData.append(key, JSON.stringify(value));
+    else if (key === 'defects' && Array.isArray(value)) formData.append(key, value.join(', '));
+    else formData.append(key, String(value));
+  });
+  files.forEach((file) => formData.append('files', file));
+  return formData;
+};
 
 const discardGuestCartStorage = () => {
   try {
@@ -39,6 +51,7 @@ const ShopContextProvider = ({ children }) => {
   const [auth, setAuth] = useState(() => loadJSON(AUTH_KEY, null));
   const [cartKey, setCartKey] = useState(() => cartKeyFor(loadJSON(AUTH_KEY, null)));
   const [cartItems, setCartItems] = useState(() => loadCart(cartKeyFor(loadJSON(AUTH_KEY, null))));
+  const cartItemsRef = useRef(cartItems);
   const [cartProducts, setCartProducts] = useState({});
   const [cartLoading, setCartLoading] = useState(() => Object.keys(loadCart(cartKeyFor(loadJSON(AUTH_KEY, null)))).length > 0);
   const [productError, setProductError] = useState('');
@@ -94,6 +107,7 @@ const ShopContextProvider = ({ children }) => {
     setCartKey(nextKey);
     setCartProducts({});
     setCartLoading(Object.keys(nextCart).length > 0);
+    cartItemsRef.current = nextCart;
     setCartItems(nextCart);
   }, [userId]);
 
@@ -242,35 +256,34 @@ const ShopContextProvider = ({ children }) => {
         toast.error('This listing is no longer available.');
         return;
       }
-      if (product.seedKey) {
-        toast.error('Sample listings are available for browsing only.');
-        return;
-      }
       const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
       if (currentUserId && String(product.sellerId) === currentUserId) {
         toast.error('You cannot add your own listed product to your cart.');
         return;
       }
       setCartProducts((previous) => ({ ...previous, [itemId]: product }));
-      setCartItems((previous) => {
-        if (previous[itemId]) return previous;
+      const result = addItemToCart(cartItemsRef.current, itemId);
+      if (result.added) {
+        cartItemsRef.current = result.cartItems;
+        setCartItems(result.cartItems);
         toast.success('Added to cart');
-        return { ...previous, [itemId]: 1 };
-      });
+      }
     } catch (error) {
       toast.error(error.message || 'Unable to confirm this listing.');
     }
   };
 
   const removeFromCart = (itemId) => {
-    setCartItems((prev) => {
-      const next = { ...prev };
-      delete next[itemId];
-      return next;
-    });
+    const next = { ...cartItemsRef.current };
+    delete next[itemId];
+    cartItemsRef.current = next;
+    setCartItems(next);
   };
 
-  const clearCart = () => setCartItems({});
+  const clearCart = () => {
+    cartItemsRef.current = {};
+    setCartItems({});
+  };
 
   const cartReady = cartKey === cartKeyFor(auth);
   const getCartCount = () => cartReady ? Object.keys(cartItems).length : 0;
@@ -281,58 +294,6 @@ const ShopContextProvider = ({ children }) => {
       const currentProduct = Object.hasOwn(cartProducts, id) ? cartProducts[id] : product;
       return total + (currentProduct?.status === 'available' ? Number(currentProduct.new_price || 0) : 0);
     }, 0) : 0;
-
-  const reserveProduct = async (productId) => {
-    if (!token) {
-      const error = new Error('Please sign in to continue.');
-      error.code = 'AUTH_REQUIRED';
-      throw error;
-    }
-    const product = all_product.find((p) => String(getProductId(p)) === String(productId))
-      || cartProducts[productId];
-    if (product?.seedKey) {
-      throw new Error('Sample listings are available for browsing only.');
-    }
-    const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
-    if (currentUserId && String(product?.sellerId) === currentUserId) {
-      toast.error('You cannot reserve your own product.');
-      return;
-    }
-    const updated = await api.post(`/products/${productId}/reserve`, {}, token);
-    setAllProduct((prev) =>
-      prev.map((p) => (String(getProductId(p)) === String(productId) ? updated : p))
-    );
-    removeFromCart(productId);
-    toast.success('Item reserved for 24 hours!');
-    return updated;
-  };
-
-  const reserveCartItems = async () => {
-    if (!token) {
-      const error = new Error('Please sign in to continue.');
-      error.code = 'AUTH_REQUIRED';
-      throw error;
-    }
-    const ids = [...Object.keys(cartItems)];
-    if (!ids.length) return { reserved: [], failed: [] };
-    const reserved = [];
-    const failed = [];
-    for (const id of ids) {
-      try {
-        const live = await api.get(`/products/${id}`, token);
-        if (live.status !== 'available') {
-          failed.push({ id, message: 'This item is no longer available.' });
-          removeFromCart(id);
-          continue;
-        }
-        await reserveProduct(id);
-        reserved.push(id);
-      } catch (err) {
-        failed.push({ id, message: err.message || 'Unable to reserve this item.' });
-      }
-    }
-    return { reserved, failed };
-  };
 
   const updateProductStatus = async (productId, status) => {
     const updated = await api.patch(`/products/${productId}/status`, { status }, token);
@@ -348,14 +309,18 @@ const ShopContextProvider = ({ children }) => {
     setAllProduct((prev) => prev.filter((p) => String(getProductId(p)) !== String(productId)));
   };
 
-  const createProduct = async (productData) => {
-    const created = await api.post('/products', productData, token);
+  const createProduct = async (productData, files = []) => {
+    const created = files.length
+      ? await api.postMultipart('/products', listingFormData(productData, files), token)
+      : await api.post('/products', productData, token);
     setAllProduct((prev) => [created, ...prev]);
     return created;
   };
 
-  const updateProduct = async (productId, productData) => {
-    const updated = await api.patch(`/products/${productId}`, productData, token);
+  const updateProduct = async (productId, productData, files = []) => {
+    const updated = files.length
+      ? await api.patchMultipart(`/products/${productId}`, listingFormData(productData, files), token)
+      : await api.patch(`/products/${productId}`, productData, token);
     setAllProduct((previous) => previous.map((product) =>
       String(getProductId(product)) === String(productId) ? updated : product
     ));
@@ -457,8 +422,6 @@ const ShopContextProvider = ({ children }) => {
       clearCart,
       getCartCount,
       getCartTotal,
-      reserveProduct,
-      reserveCartItems,
       updateProductStatus,
       deleteProduct,
       createProduct,

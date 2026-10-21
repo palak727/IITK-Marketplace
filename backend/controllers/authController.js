@@ -115,8 +115,6 @@ export const requestResetOTP = async (req, res) => {
     }
 
     if (!(error instanceof OTPError)) console.error('Request Reset OTP error:', error);
-    // Keep reset requests indistinguishable for existing and unknown accounts,
-    // including mail failures and per-address cooldowns.
     return res.json(genericResponse);
   }
 };

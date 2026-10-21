@@ -18,6 +18,7 @@ import { logger } from './utils/logger.js';
 import { rateLimitMiddleware } from './middleware/rateLimit.js';
 import { validateJWTConfig } from './middleware/auth.js';
 import { isMailerConfigured } from './services/mailer.js';
+import { startProductCleanup } from './services/productLifecycle.js';
 
 export const app = express();
 export const httpServer = createServer(app);
@@ -125,10 +126,19 @@ app.use((err, req, res, next) => {
   let status = 500;
   let message = 'Internal server error.';
 
-  if (err.status === 413 || err.code === 'LIMIT_FILE_SIZE') {
+  if (err.code === 'UNSUPPORTED_IMAGE_TYPE') {
+    status = 400;
+    message = 'Only JPEG, PNG, and WebP images are supported.';
+  } else if (err.name === 'MulterError') {
+    status = 400;
+    message = 'Image upload is invalid or exceeds the upload limits.';
+  } else if (err.status === 413 && req.originalUrl.startsWith('/api/products')) {
+    status = 400;
+    message = 'Product request exceeds the image upload limits.';
+  } else if (err.status === 413) {
     status = 413;
     message = 'Request payload is too large.';
-  } else if (err.status === 400 || err.name === 'MulterError') {
+  } else if (err.status === 400) {
     status = 400;
     message = 'Request payload is invalid.';
   }
@@ -145,6 +155,7 @@ export const startServer = async (port = PORT) => {
     if (!allowedOrigins.length) throw new Error('FRONTEND_URL must explicitly list allowed production origins.');
   }
   await connectDB();
+7  startProductCleanup();
   return httpServer.listen(port, '0.0.0.0', () => {
     logger.info(`Server running on http://0.0.0.0:${port}`, 'server');
   });

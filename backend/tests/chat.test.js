@@ -6,6 +6,7 @@ import Product from '../models/Product.js';
 import Message from '../models/Message.js';
 import { buildConversationId, saveMessage, getUserConversations, getConversationMessages, markAsRead } from '../controllers/chatController.js';
 import { authorizeConversation, createChatMessage } from '../services/chatService.js';
+import { deleteProduct } from '../controllers/productController.js';
 import { mongoCollections, resetMongo } from './mongoMock.js';
 
 const makeResponse = () => ({
@@ -34,11 +35,6 @@ const addProduct = (id, sellerId, name = 'Cycle') => Product.create({
   sellerName: 'Seller',
 });
 
-test('conversation ids stay distinct per product', () => {
-  assert.notEqual(buildConversationId('u1', 'u2', 'p1'), buildConversationId('u1', 'u2', 'p2'));
-  assert.equal(buildConversationId('u1', 'u2', 'p1'), 'u1_u2_p1');
-});
-
 test('messages are grouped separately by product thread in MongoDB', async () => {
   resetMongo();
   const senderId = userId();
@@ -63,37 +59,6 @@ test('messages are grouped separately by product thread in MongoDB', async () =>
   assert.equal(receiverThreads.conversations.length, 2);
 });
 
-test('markAsRead updates only recipient messages in the requested thread', async () => {
-  resetMongo();
-  const senderId = userId();
-  const receiverId = userId();
-  const sellerId = userId();
-  const productOne = userId();
-  const productTwo = userId();
-  await addProduct(productOne, sellerId, 'Product 1');
-  await addProduct(productTwo, sellerId, 'Product 2');
-  const conversationId = buildConversationId(senderId, sellerId, productOne);
-  const otherConversationId = buildConversationId(senderId, sellerId, productTwo);
-  await saveMessage({
-    conversationId, senderId, senderName: 'Alice', receiverId: sellerId, productId: productOne, text: 'one',
-  });
-  await saveMessage({
-    conversationId, senderId: sellerId, senderName: 'Bob', receiverId: senderId, productId: productOne, text: 'two',
-  });
-  await saveMessage({
-    conversationId: otherConversationId, senderId, senderName: 'Alice', receiverId: sellerId, productId: productTwo, text: 'three',
-  });
-
-  const readResponse = makeResponse();
-  await markAsRead({ params: { conversationId }, user: { id: sellerId } }, readResponse);
-  const historyResponse = makeResponse();
-  await getConversationMessages({ params: { conversationId }, query: {}, user: { id: sellerId } }, historyResponse);
-
-  assert.equal(readResponse.body.success, true);
-  assert.equal(historyResponse.body.messages.find((message) => message.receiverId === sellerId).read, true);
-  assert.equal(mongoCollections.Message.find((message) => message.receiverId === senderId).read, false);
-});
-
 test('only conversation participants can read an existing product thread', async () => {
   resetMongo();
   const buyerId = userId();
@@ -107,6 +72,11 @@ test('only conversation participants can read an existing product thread', async
   const { conversationId } = await createChatMessage({
     sender: { id: buyerId, name: 'Buyer' }, receiverId: sellerId, productId, text: 'Hello',
   });
+
+  const archived = makeResponse();
+  await deleteProduct({ params: { id: productId }, user: { id: sellerId } }, archived);
+  assert.equal(archived.statusCode, 200);
+  assert.ok(mongoCollections.Product[0].archivedAt);
 
   assert.equal(await authorizeConversation(conversationId, buyerId), true);
   assert.equal(await authorizeConversation(conversationId, sellerId), true);

@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomInt, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomInt, timingSafeEqual } from 'node:crypto';
 import OTPVerification from '../models/OTPVerification.js';
 
 const OTP_LIFETIME_MS = 10 * 60 * 1000;
@@ -7,7 +7,6 @@ export const OTP_REQUEST_COOLDOWN_MS = 60 * 1000;
 const REQUEST_COOLDOWN_MS = OTP_REQUEST_COOLDOWN_MS;
 const MAX_REQUESTS_PER_WINDOW = 5;
 export const MAX_OTP_ATTEMPTS = 5;
-const DEVELOPMENT_OTP_PEPPER = randomBytes(32).toString('hex');
 
 export class OTPError extends Error {
   constructor(message, status = 400) {
@@ -17,7 +16,8 @@ export class OTPError extends Error {
 }
 
 const hashOTP = (email, purpose, otp) => {
-  const pepper = process.env.JWT_SECRET || DEVELOPMENT_OTP_PEPPER;
+  const pepper = process.env.OTP_SECRET || process.env.JWT_SECRET;
+  if (!pepper) throw new OTPError('OTP verification is not configured.', 503);
   return createHmac('sha256', pepper).update(`${purpose}:${email}:${otp}`).digest('hex');
 };
 

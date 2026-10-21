@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { Plus, Package, Upload, MapPin, Tag, AlertCircle, ImageOff, Pencil, Check, RotateCcw } from 'lucide-react';
+import { Plus, Package, Upload, MapPin, Tag, AlertCircle, ImageOff, Pencil, Check, X } from 'lucide-react';
 import LazyImage from '../components/LazyImage/LazyImage';
 import { useShop } from '../context/ShopContext';
 import { api, CONDITIONS, CATEGORIES, formatPrice, getProductId, getStatusBadge, HALLS } from '../utils/api';
+import { MAX_IMAGE_BYTES, MAX_PRODUCT_IMAGES, MAX_TOTAL_UPLOAD_BYTES, PRODUCT_IMAGE_TYPES } from '../utils/productImageConfig';
 
 const INITIAL_FORM_STATE = {
   name: '',
@@ -16,6 +17,7 @@ const INITIAL_FORM_STATE = {
   condition: 'Barely Used',
   defects: '',
   image: '',
+  images: [],
 };
 
 const newRequestId = () => globalThis.crypto?.randomUUID?.() || `listing-${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -26,7 +28,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [listingError, setListingError] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [filePreviews, setFilePreviews] = useState([]);
   const [form, setForm] = useState({
     ...INITIAL_FORM_STATE,
     hall: auth?.user?.hall || 'Hall 12',
@@ -34,6 +37,12 @@ const Dashboard = () => {
   const [saving, setSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [createRequestId, setCreateRequestId] = useState(newRequestId);
+
+  useEffect(() => {
+    const previews = selectedFiles.map((file) => URL.createObjectURL(file));
+    setFilePreviews(previews);
+    return () => previews.forEach((preview) => URL.revokeObjectURL(preview));
+  }, [selectedFiles]);
 
   const loadListings = useCallback(async () => {
     setLoading(true);
@@ -54,52 +63,58 @@ const Dashboard = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    if (!editingProduct) setCreateRequestId(newRequestId());
   };
 
   const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    setUploading(true);
-    try {
-      const url = await api.upload(file, token);
-      setForm((prev) => ({ ...prev, image: url }));
-      toast.success('Image uploaded successfully!');
-    } catch (err) {
-      toast.error(err.message || 'Image upload failed');
-    } finally {
-      setUploading(false);
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    if (files.some((file) => !PRODUCT_IMAGE_TYPES.includes(file.type) || file.size > MAX_IMAGE_BYTES)) {
+      toast.error('Choose JPEG, PNG, or WebP images up to 5 MB each.');
+      return;
     }
+    if (form.images.length + selectedFiles.length + files.length > MAX_PRODUCT_IMAGES) {
+      toast.error(`A listing can have at most ${MAX_PRODUCT_IMAGES} images.`);
+      return;
+    }
+    const totalUploadSize = [...selectedFiles, ...files].reduce((total, file) => total + file.size, 0);
+    if (totalUploadSize > MAX_TOTAL_UPLOAD_BYTES) {
+      toast.error('New images must total no more than 12 MB.');
+      return;
+    }
+    setSelectedFiles((current) => [...current, ...files]);
+    if (!editingProduct) setCreateRequestId(newRequestId());
   };
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || form.new_price === '' || saving || uploading) {
+    if (!form.name.trim() || form.new_price === '' || saving) {
       toast.error('Item name and selling price are required');
       return;
     }
 
     setSaving(true);
     try {
-      const imgUrl = form.image || '';
       const payload = {
         ...form,
         new_price: Number(form.new_price),
         old_price: form.old_price ? Number(form.old_price) : Number(form.new_price) * 1.3,
         defects: form.defects ? form.defects.split(',').map((d) => d.trim()).filter(Boolean) : [],
-        images: imgUrl ? [imgUrl] : [],
-        image: imgUrl,
+        images: form.images,
+        image: form.images[0] || '',
         ...(editingProduct ? {} : { clientRequestId: createRequestId }),
       };
 
       const saved = editingProduct
-        ? await updateProduct(getProductId(editingProduct), payload)
-        : await createProduct(payload);
+        ? await updateProduct(getProductId(editingProduct), payload, selectedFiles)
+        : await createProduct(payload, selectedFiles);
       setProducts((prev) => editingProduct
         ? prev.map((product) => String(getProductId(product)) === String(getProductId(saved)) ? saved : product)
         : [saved, ...prev]);
       setShowForm(false);
       setEditingProduct(null);
+      setSelectedFiles([]);
       setCreateRequestId(newRequestId());
       setForm({
         ...INITIAL_FORM_STATE,
@@ -128,9 +143,11 @@ const Dashboard = () => {
   const beginEdit = (product) => {
     setEditingProduct(product);
     setCreateRequestId('');
+    setSelectedFiles([]);
     setForm({
       ...INITIAL_FORM_STATE,
       ...product,
+      images: product.images?.length ? product.images : (product.image ? [product.image] : []),
       defects: Array.isArray(product.defects) ? product.defects.join(', ') : '',
       hall: product.hall || auth?.user?.hall || 'Hall 12',
       image: product.image || '',
@@ -140,7 +157,7 @@ const Dashboard = () => {
 
   const handleDeleteProduct = async (product) => {
     const productId = getProductId(product);
-    if (!window.confirm(`Delete "${product.name}" from your listings?`)) return;
+    if (!window.confirm(`Remove "${product.name}" from the marketplace? Its history will be retained.`)) return;
 
     try {
       await deleteProduct(productId);
@@ -164,6 +181,7 @@ const Dashboard = () => {
           onClick={() => {
             if (showForm) {
               setEditingProduct(null);
+              setSelectedFiles([]);
               setCreateRequestId(newRequestId());
               setForm({ ...INITIAL_FORM_STATE, hall: auth?.user?.hall || 'Hall 12' });
             }
@@ -269,20 +287,28 @@ const Dashboard = () => {
 
           <div>
             <label className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-              <Upload size={12} className="text-royal" /> Upload Image File or Enter URL
+              <Upload size={12} className="text-royal" /> Listing Images (up to 4, 5 MB each, 12 MB total)
             </label>
-            <div className="flex gap-2">
-              <input
-                name="image"
-                value={form.image}
-                onChange={handleChange}
-                placeholder="https://... or choose file on right"
-                className="input-field flex-1"
-              />
-              <label className="btn-secondary text-xs px-4 py-2.5 cursor-pointer flex items-center gap-1 shrink-0">
-                <Upload size={14} /> {uploading ? 'Uploading...' : 'Browse Image'}
-                <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-              </label>
+            <label className="btn-secondary text-xs px-4 py-2.5 cursor-pointer inline-flex items-center gap-1">
+              <Upload size={14} /> Choose Images
+              <input type="file" accept={PRODUCT_IMAGE_TYPES.join(',')} multiple onChange={handleFileUpload} className="hidden" />
+            </label>
+            <div className="mt-3 flex flex-wrap gap-3">
+              {form.images.map((src, index) => (
+                <div key={`saved-${src}-${index}`} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200">
+                  <LazyImage src={src} alt={`Listing image ${index + 1}`} className="w-full h-full object-cover" />
+                  <button type="button" aria-label={`Remove image ${index + 1}`} onClick={() => setForm((current) => {
+                    const images = current.images.filter((_, imageIndex) => imageIndex !== index);
+                    return { ...current, images, image: images[0] || '' };
+                  })} className="absolute top-1 right-1 rounded-full bg-white/90 p-1 text-rose-700"><X size={13} /></button>
+                </div>
+              ))}
+              {filePreviews.map((src, index) => (
+                <div key={`new-${src}`} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200">
+                  <LazyImage src={src} alt={`New listing image ${index + 1}`} className="w-full h-full object-cover" />
+                  <button type="button" aria-label={`Remove new image ${index + 1}`} onClick={() => setSelectedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))} className="absolute top-1 right-1 rounded-full bg-white/90 p-1 text-rose-700"><X size={13} /></button>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -312,7 +338,7 @@ const Dashboard = () => {
           </div>
 
           <div className="flex gap-3 pt-2">
-            <button type="submit" disabled={saving || uploading} className="btn-primary disabled:opacity-50">
+            <button type="submit" disabled={saving} className="btn-primary disabled:opacity-50">
               {saving ? 'Saving...' : editingProduct ? 'Save Changes' : 'Publish Item Listing'}
             </button>
             <button
@@ -320,6 +346,7 @@ const Dashboard = () => {
               onClick={() => {
                 setShowForm(false);
                 setEditingProduct(null);
+                setSelectedFiles([]);
                 setCreateRequestId(newRequestId());
                 setForm({ ...INITIAL_FORM_STATE, hall: auth?.user?.hall || 'Hall 12' });
               }}
@@ -346,9 +373,11 @@ const Dashboard = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          <h2 className="text-lg font-bold text-navy mb-2">Your Active Listings ({products.length})</h2>
+            <h2 className="text-lg font-bold text-navy mb-2">Your Listings ({products.length})</h2>
           {products.map((product) => {
-            const badge = getStatusBadge(product.status);
+            const badge = product.archivedAt
+              ? { label: 'Archived', className: 'bg-slate-100 text-slate-600 border border-slate-200' }
+              : getStatusBadge(product.status);
             const productId = getProductId(product);
 
             return (
@@ -379,25 +408,18 @@ const Dashboard = () => {
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0">
-                  {product.status === 'available' && (
+                  {!product.archivedAt && product.status === 'available' && (
                     <>
                       <button onClick={() => beginEdit(product)} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-navy" title="Edit listing"><Pencil size={15} /> Edit</button>
                       <button onClick={() => handleStatus(product, 'sold')} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-800" title="Mark sold"><Check size={15} /> Mark sold</button>
                     </>
                   )}
-                  {product.status === 'reserved' && (
-                    <>
-                      <button onClick={() => handleStatus(product, 'available')} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-amber-200 bg-amber-50 text-xs font-bold text-amber-800" title="Cancel reservation"><RotateCcw size={15} /> Release</button>
-                      <button onClick={() => handleStatus(product, 'sold')} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-800" title="Mark sold"><Check size={15} /> Mark sold</button>
-                    </>
-                  )}
-                  <button
+                  {!product.archivedAt && <button
                     onClick={() => handleDeleteProduct(product)}
-                    disabled={product.status === 'reserved'}
                     className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 shrink-0 shadow-sm"
                   >
                     Delete
-                  </button>
+                  </button>}
                 </div>
               </motion.div>
             );

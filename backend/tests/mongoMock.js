@@ -38,7 +38,9 @@ const matchesValue = (value, expected) => {
       if (operator === '$gte') return value != null && compare(value, operand) >= 0;
       if (operator === '$gt') return value != null && compare(value, operand) > 0;
       if (operator === '$exists') return Boolean(value !== undefined) === operand;
-      if (operator === '$type') return typeof value === 'string' && operand === 'string';
+      if (operator === '$type') return operand === 'string'
+        ? typeof value === 'string'
+        : operand === 'date' && value instanceof Date;
       return false;
     });
   }
@@ -120,8 +122,8 @@ const newDocument = (name, values) => {
     document.hall ??= 'Hall 1';
     document.images ??= [];
     document.defects ??= [];
-    document.reservedBy ??= null;
-    document.reservedUntil ??= null;
+    document.soldAt ??= null;
+    document.archivedAt ??= null;
   }
   if (name === 'Message') document.read ??= false;
   if (name === 'Notification') document.read ??= false;
@@ -139,11 +141,17 @@ const installModel = (Model) => {
   Model.exists = async (filter = {}) => documents.some((item) => matches(item, filter)) ? { _id: 'exists' } : null;
   Model.countDocuments = async (filter = {}) => documents.filter((item) => matches(item, filter)).length;
   Model.create = async (values) => {
+    if (name === 'Product' && typeof values.clientRequestId === 'string' && documents.some((item) =>
+      item.sellerId === values.sellerId && item.clientRequestId === values.clientRequestId
+    )) {
+      const error = new Error('duplicate idempotency key');
+      error.code = 11000;
+      throw error;
+    }
     const document = newDocument(name, values);
     documents.push(document);
     return document;
   };
-  Model.insertMany = async (values) => Promise.all(values.map((item) => Model.create(item)));
   Model.updateOne = async (filter, update, options = {}) => {
     let document = documents.find((item) => matches(item, filter));
     let upsertedCount = 0;
@@ -184,10 +192,6 @@ const installModel = (Model) => {
     return options.new ? document : before;
   });
   Model.findByIdAndUpdate = (id, update) => Model.findOneAndUpdate({ _id: id }, update, { new: true });
-  Model.findOneAndDelete = (filter) => new MockQuery(() => {
-    const index = documents.findIndex((item) => matches(item, filter));
-    return index < 0 ? null : documents.splice(index, 1)[0];
-  });
   Model.init = async () => Model;
 };
 

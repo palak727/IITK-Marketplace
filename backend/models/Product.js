@@ -22,14 +22,15 @@ const productSchema = new mongoose.Schema(
     defects: [{ type: String }],
     status: {
       type: String,
-      enum: ['available', 'reserved', 'sold'],
+      enum: ['available', 'sold'],
       default: 'available',
     },
-    reservedUntil: { type: Date, default: null },
-    reservedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    soldAt: { type: Date, default: null },
+    archivedAt: { type: Date, default: null },
     sellerId: { type: String, required: true },
     sellerName: { type: String, required: true },
     clientRequestId: { type: String, default: undefined },
+    clientRequestHash: { type: String, default: undefined },
     seedKey: { type: String, default: undefined },
   },
   { timestamps: true }
@@ -40,5 +41,6 @@ productSchema.index(
   { unique: true, partialFilterExpression: { clientRequestId: { $type: 'string' } } }
 );
 productSchema.index({ seedKey: 1 }, { unique: true, partialFilterExpression: { seedKey: { $type: 'string' } } });
+productSchema.index({ status: 1, soldAt: 1, archivedAt: 1 });
 
 export default mongoose.models.Product || mongoose.model('Product', productSchema);

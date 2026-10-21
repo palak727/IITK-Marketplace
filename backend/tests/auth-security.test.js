@@ -2,10 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
-import { register, login, requestOTP, requestResetOTP } from '../controllers/authController.js';
-import { generateToken, getAuthenticatedUser } from '../middleware/auth.js';
+import { isIITKEmail, register, login, requestResetOTP } from '../controllers/authController.js';
+import { generateToken, getAuthenticatedUser, authMiddleware } from '../middleware/auth.js';
+import { setupProductRoutes } from '../routes/products.js';
+import { setupChatRoutes } from '../routes/chat.js';
 import { mongoCollections, resetMongo } from './mongoMock.js';
-import { cancelOTP, consumeVerifiedOTP, issueOTP, verifyOTP as verifyOTPCode } from '../services/otpService.js';
+import { consumeVerifiedOTP, issueOTP, verifyOTP as verifyOTPCode } from '../services/otpService.js';
+import { ensureSeedUsers, requireSeedConfiguration } from '../seed.js';
+
+process.env.OTP_SECRET ||= 'test-otp-secret';
 
 const response = () => ({
   statusCode: 200,
@@ -29,6 +34,15 @@ test('registration is rejected without a verified registration OTP', async () =>
   assert.equal(mongoCollections.User.length, 0);
 });
 
+test('registration accepts only IITK email addresses', async () => {
+  resetMongo();
+  const res = response();
+  await register({ body: { name: 'Test Student', email: 'student@gmail.com', password: 'student123' } }, res);
+  assert.equal(res.statusCode, 400);
+  assert.equal(mongoCollections.User.length, 0);
+  assert.equal(isIITKEmail('student@iitk.ac.in'), true);
+});
+
 test('verified registration OTP is purpose-bound and consumed by registration', async () => {
   resetMongo();
   const code = await issueOTP('signup2@iitk.ac.in', 'register');
@@ -40,6 +54,21 @@ test('verified registration OTP is purpose-bound and consumed by registration', 
   assert.equal(res.statusCode, 201);
   assert.equal(mongoCollections.User[0].emailVerified, true);
   await assert.rejects(consumeVerifiedOTP('signup2@iitk.ac.in', 'register'));
+});
+
+test('an OTP remains valid across backend instances when they share the configured secret', async () => {
+  resetMongo();
+  const previousSecret = process.env.OTP_SECRET;
+  process.env.OTP_SECRET = 'stable-test-otp-secret';
+  try {
+    const code = await issueOTP('restart@iitk.ac.in', 'register');
+    const anotherInstance = await import('../services/otpService.js?separate-instance');
+    await anotherInstance.verifyOTP('restart@iitk.ac.in', 'register', code);
+    assert.ok(mongoCollections.OTPVerification[0].verifiedAt);
+  } finally {
+    if (previousSecret === undefined) delete process.env.OTP_SECRET;
+    else process.env.OTP_SECRET = previousSecret;
+  }
 });
 
 test('OTP cannot be transferred between email addresses or purposes', async () => {
@@ -67,33 +96,16 @@ test('expired and over-attempted OTPs are rejected', async () => {
   await assert.rejects(verifyOTPCode('signup7@iitk.ac.in', 'register', code));
 });
 
-test('failed signup email delivery reports an error and removes the unusable OTP', async () => {
+test('resending a code invalidates the previous code and accepts the new one', async () => {
   resetMongo();
-  const gmailKeys = ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN', 'GMAIL_USER'];
-  const saved = Object.fromEntries(gmailKeys.map((key) => [key, process.env[key]]));
-  gmailKeys.forEach((key) => delete process.env[key]);
+  const firstCode = await issueOTP('resend@iitk.ac.in', 'register');
+  const record = mongoCollections.OTPVerification[0];
+  record.createdAt = new Date(Date.now() - 61_000);
 
-  try {
-    const res = response();
-    await requestOTP({ body: { email: 'delivery-failure@iitk.ac.in' } }, res);
-    assert.equal(res.statusCode, 503);
-    assert.equal(mongoCollections.OTPVerification.length, 0);
-  } finally {
-    for (const key of gmailKeys) {
-      if (saved[key] === undefined) delete process.env[key];
-      else process.env[key] = saved[key];
-    }
-  }
-});
-
-test('cancelling an OTP only removes the matching pending code', async () => {
-  resetMongo();
-  const code = await issueOTP('cancel@iitk.ac.in', 'register');
-
-  assert.equal(await cancelOTP('cancel@iitk.ac.in', 'register', '000000'), false);
-  assert.equal(await cancelOTP('cancel@iitk.ac.uk', 'register', code), false);
-  assert.equal(await cancelOTP('cancel@iitk.ac.in', 'register', code), true);
-  await assert.rejects(verifyOTPCode('cancel@iitk.ac.in', 'register', code));
+  const secondCode = await issueOTP('resend@iitk.ac.in', 'register');
+  await assert.rejects(verifyOTPCode('resend@iitk.ac.in', 'register', firstCode));
+  await verifyOTPCode('resend@iitk.ac.in', 'register', secondCode);
+  assert.ok(record.verifiedAt);
 });
 
 test('reset OTP requests have the same response for known and unknown addresses', async () => {
@@ -125,4 +137,67 @@ test('login rejects explicitly unverified accounts and protected identity comes 
 
   const deletedToken = generateToken({ id: '0123456789abcdef01234567' });
   assert.equal(await getAuthenticatedUser(deletedToken), null);
+});
+
+test('newly seeded user can log in and use a protected route with the configured password', async () => {
+  resetMongo();
+  const previous = {
+    nodeEnv: process.env.NODE_ENV,
+    allowProduction: process.env.ALLOW_PRODUCTION_SEED,
+    password: process.env.SEED_USER_PASSWORD,
+    jwtSecret: process.env.JWT_SECRET,
+  };
+  try {
+    process.env.NODE_ENV = 'production';
+    process.env.ALLOW_PRODUCTION_SEED = 'true';
+    process.env.SEED_USER_PASSWORD = 'seed-login-test-2026';
+    process.env.JWT_SECRET = 'test-only-jwt-secret-with-at-least-32-characters';
+    requireSeedConfiguration();
+    const accounts = await ensureSeedUsers();
+    const account = accounts[0].user;
+
+    const wrongPassword = response();
+    await login({ body: { email: account.email, password: 'incorrect-password' } }, wrongPassword);
+    assert.equal(wrongPassword.statusCode, 400);
+
+    const accepted = response();
+    await login({ body: { email: ` ${account.email.toUpperCase()} `, password: process.env.SEED_USER_PASSWORD } }, accepted);
+    assert.ok(accepted.body.token);
+    assert.equal(accepted.body.user.id, String(account._id));
+
+    const protectedResponse = response();
+    let authorized = false;
+    await authMiddleware({ headers: { authorization: `Bearer ${accepted.body.token}` } }, protectedResponse, () => {
+      authorized = true;
+    });
+    assert.equal(authorized, true);
+    assert.equal(protectedResponse.statusCode, 200);
+  } finally {
+    if (previous.nodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previous.nodeEnv;
+    if (previous.allowProduction === undefined) delete process.env.ALLOW_PRODUCTION_SEED;
+    else process.env.ALLOW_PRODUCTION_SEED = previous.allowProduction;
+    if (previous.password === undefined) delete process.env.SEED_USER_PASSWORD;
+    else process.env.SEED_USER_PASSWORD = previous.password;
+    if (previous.jwtSecret === undefined) delete process.env.JWT_SECRET;
+    else process.env.JWT_SECRET = previous.jwtSecret;
+    resetMongo();
+  }
+});
+
+test('private product and chat routes register authentication middleware', () => {
+  const routes = new Map();
+  const router = Object.fromEntries(['get', 'post', 'patch', 'delete'].map((method) => [method, (path, ...handlers) => {
+    routes.set(`${method.toUpperCase()} ${path}`, handlers);
+  }]));
+  setupProductRoutes(router);
+  setupChatRoutes(router);
+
+  for (const route of [
+    'GET /seller/mine',
+    'POST /',
+    'PATCH /:id', 'PATCH /:id/status', 'DELETE /:id',
+    'GET /my-conversations', 'GET /unread', 'GET /conversation/:conversationId',
+    'POST /conversation/:conversationId/read', 'POST /send',
+  ]) assert.ok(routes.get(route)?.includes(authMiddleware), `${route} must require authentication`);
 });

@@ -65,7 +65,6 @@ export const createChatMessage = async ({ sender, receiverId, productId, text, e
 
   const [receiver, product] = await Promise.all([getUser(targetId), getProduct(cleanProductId)]);
   if (!product) throw new ChatError('Listing not found.', 404);
-  if (product.seedKey) throw new ChatError('This sample listing is not linked to an active seller.', 409);
   if (!receiver) throw new ChatError('Recipient not found.', 404);
   const sellerId = String(product.sellerId || '');
   if (!sellerId || (targetId !== sellerId && senderId !== sellerId)) {
