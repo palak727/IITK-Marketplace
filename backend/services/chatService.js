@@ -64,19 +64,30 @@ export const createChatMessage = async ({ sender, receiverId, productId, text, e
   if (cleanText.length > MAX_MESSAGE_LENGTH) throw new ChatError(`Messages must be ${MAX_MESSAGE_LENGTH} characters or fewer.`);
 
   const [receiver, product] = await Promise.all([getUser(targetId), getProduct(cleanProductId)]);
-  if (!product) throw new ChatError('Listing not found.', 404);
   if (!receiver) throw new ChatError('Recipient not found.', 404);
-  const sellerId = String(product.sellerId || '');
-  if (!sellerId || (targetId !== sellerId && senderId !== sellerId)) {
-    throw new ChatError('Messages about this listing must include its seller.', 403);
-  }
 
   const conversationId = buildConversationId(senderId, targetId, cleanProductId);
   if (expectedConversationId && expectedConversationId !== conversationId) {
     throw new ChatError('Conversation does not match these participants and listing.', 403);
   }
-  if (senderId === sellerId && !(await hasPreviousBuyerMessage(conversationId, sellerId, targetId, cleanProductId))) {
-    throw new ChatError('The buyer must start this listing conversation.', 403);
+  if (product) {
+    const sellerId = String(product.sellerId || '');
+    if (!sellerId || (targetId !== sellerId && senderId !== sellerId)) {
+      throw new ChatError('Messages about this listing must include its seller.', 403);
+    }
+    if (senderId === sellerId && !(await hasPreviousBuyerMessage(conversationId, sellerId, targetId, cleanProductId))) {
+      throw new ChatError('The buyer must start this listing conversation.', 403);
+    }
+  } else {
+    const existingConversation = await Message.exists({
+      conversationId,
+      productId: cleanProductId,
+      $or: [
+        { senderId, receiverId: targetId },
+        { senderId: targetId, receiverId: senderId },
+      ],
+    });
+    if (!existingConversation) throw new ChatError('Listing not found.', 404);
   }
 
   const message = await saveMessage({
@@ -96,7 +107,7 @@ export const createChatMessage = async ({ sender, receiverId, productId, text, e
       senderId,
       senderName: sender.name,
       type: 'message',
-      message: `${sender.name || 'A student'} sent you a message about ${product.name || 'a listing'}.`,
+      message: `${sender.name || 'A student'} sent you a message about ${product?.name || 'a listing'}.`,
       conversationId,
       productId: cleanProductId,
       eventKey,

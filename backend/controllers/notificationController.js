@@ -30,7 +30,7 @@ export const createNotification = async ({
     const doc = await Notification.findOneAndUpdate(
       { eventKey },
       { $setOnInsert: payload },
-      { new: true, upsert: true, setDefaultsOnInsert: true }
+      { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
     );
     return doc.toObject();
   }
@@ -68,7 +68,7 @@ export const markNotificationRead = async (req, res) => {
     const item = await Notification.findOneAndUpdate(
       { _id: id, recipientId: userId },
       { $set: { read: true } },
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     if (!item) return res.status(404).json({ message: 'Notification not found' });

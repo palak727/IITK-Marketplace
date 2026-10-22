@@ -18,7 +18,7 @@ import { logger } from './utils/logger.js';
 import { rateLimitMiddleware } from './middleware/rateLimit.js';
 import { validateJWTConfig } from './middleware/auth.js';
 import { isMailerConfigured } from './services/mailer.js';
-import { startProductCleanup } from './services/productLifecycle.js';
+import { requireSeedConfiguration, seedDemoData } from './seed.js';
 
 export const app = express();
 export const httpServer = createServer(app);
@@ -126,10 +126,7 @@ app.use((err, req, res, next) => {
   let status = 500;
   let message = 'Internal server error.';
 
-  if (err.code === 'UNSUPPORTED_IMAGE_TYPE') {
-    status = 400;
-    message = 'Only JPEG, PNG, and WebP images are supported.';
-  } else if (err.name === 'MulterError') {
+  if (err.name === 'MulterError') {
     status = 400;
     message = 'Image upload is invalid or exceeds the upload limits.';
   } else if (err.status === 413 && req.originalUrl.startsWith('/api/products')) {
@@ -154,8 +151,13 @@ export const startServer = async (port = PORT) => {
     if (!process.env.MONGO_URI) throw new Error('MONGO_URI is required in production.');
     if (!allowedOrigins.length) throw new Error('FRONTEND_URL must explicitly list allowed production origins.');
   }
+  requireSeedConfiguration();
   await connectDB();
-7  startProductCleanup();
+  const { accounts, products } = await seedDemoData();
+  logger.info(
+    `Sample data ready: ${accounts.filter(({ created }) => created).length} users and ${products.length} listings created.`,
+    'seed'
+  );
   return httpServer.listen(port, '0.0.0.0', () => {
     logger.info(`Server running on http://0.0.0.0:${port}`, 'server');
   });

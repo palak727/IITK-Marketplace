@@ -14,9 +14,10 @@ const listingFormData = (listing, files) => {
   const formData = new FormData();
   Object.entries(listing).forEach(([key, value]) => {
     if (value === undefined || value === null) return;
-    if (key === 'images') formData.append(key, JSON.stringify(value));
-    else if (key === 'defects' && Array.isArray(value)) formData.append(key, value.join(', '));
-    else formData.append(key, String(value));
+    if (Array.isArray(value)) {
+      if (value.length) value.forEach((item) => formData.append(key, String(item)));
+      else formData.append(key, '');
+    } else formData.append(key, String(value));
   });
   files.forEach((file) => formData.append('files', file));
   return formData;
@@ -55,6 +56,7 @@ const ShopContextProvider = ({ children }) => {
   const [cartProducts, setCartProducts] = useState({});
   const [cartLoading, setCartLoading] = useState(() => Object.keys(loadCart(cartKeyFor(loadJSON(AUTH_KEY, null)))).length > 0);
   const [productError, setProductError] = useState('');
+  const productRequestId = useRef(0);
   const [productPage, setProductPage] = useState(1);
   const productLimit = 20;
   const [productTotal, setProductTotal] = useState(0);
@@ -72,6 +74,7 @@ const ShopContextProvider = ({ children }) => {
   const userId = getUserId(auth);
 
   const fetchProducts = useCallback(async (params = {}) => {
+    const requestId = ++productRequestId.current;
     setLoading(true);
     setProductError('');
     try {
@@ -80,12 +83,16 @@ const ShopContextProvider = ({ children }) => {
       const query = new URLSearchParams(queryParams).toString();
       const data = await api.get(`/products${query ? `?${query}` : ''}`);
       const productsList = Array.isArray(data) ? data : data?.products || [];
-      setAllProduct(productsList);
-      setProductTotal(data?.total ?? productsList.length);
+      if (requestId === productRequestId.current) {
+        setAllProduct(productsList);
+        setProductTotal(data?.total ?? productsList.length);
+      }
     } catch (err) {
-      setProductError(err.message || 'Unable to load marketplace listings.');
+      if (requestId === productRequestId.current) {
+        setProductError(err.message || 'Unable to load marketplace listings.');
+      }
     } finally {
-      setLoading(false);
+      if (requestId === productRequestId.current) setLoading(false);
     }
   }, [productPage, productLimit]);
 
@@ -257,7 +264,7 @@ const ShopContextProvider = ({ children }) => {
         return;
       }
       const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
-      if (currentUserId && String(product.sellerId) === currentUserId) {
+      if (currentUserId && String(product.sellerId?._id || product.sellerId) === currentUserId) {
         toast.error('You cannot add your own listed product to your cart.');
         return;
       }
@@ -327,13 +334,13 @@ const ShopContextProvider = ({ children }) => {
     return updated;
   };
 
-  const openChat = (product, sellerId, sellerName = product?.sellerName || 'Seller', productId = product ? getProductId(product) : '') => {
+  const openChat = (product, sellerId, sellerName = product?.sellerId?.name || 'Seller', productId = product ? getProductId(product) : '') => {
     if (!auth) {
       toast.error('Please sign in to message the seller.');
       return;
     }
 
-    const targetSellerId = String(sellerId || product?.sellerId || '');
+    const targetSellerId = String(sellerId || product?.sellerId?._id || product?.sellerId || '');
     const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
 
     if (currentUserId && targetSellerId && currentUserId === targetSellerId) {
@@ -348,15 +355,15 @@ const ShopContextProvider = ({ children }) => {
         _id: productId,
         id: productId,
         name: 'Product Inquiry',
-        image: '',
+        images: [],
         new_price: 0,
-        status: 'available',
+        status: 'unknown',
         sellerId: targetSellerId || 'seller-unknown',
       };
 
     setActiveChat({
       product: resolvedProduct,
-      sellerId: targetSellerId || resolvedProduct?.sellerId || 'seller-unknown',
+      sellerId: targetSellerId || resolvedProduct?.sellerId?._id || resolvedProduct?.sellerId || 'seller-unknown',
       sellerName,
       productId: productId || getProductId(resolvedProduct),
     });

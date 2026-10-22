@@ -48,14 +48,15 @@ export default function ChatInbox({ onClose }) {
       setConversations((prev) => {
         const next = [...prev];
         const index = next.findIndex((item) => item.conversationId === msg.conversationId);
+        const isMe = String(msg.senderId) === String(auth.user.id);
         const entry = {
           conversationId: msg.conversationId,
-          otherUserId: String(msg.senderId) === String(auth.user.id) ? String(msg.receiverId) : String(msg.senderId),
-          otherUserName: String(msg.senderId) === String(auth.user.id) ? 'You' : (msg.senderName || 'IITKian'),
+          otherUserId: isMe ? String(msg.receiverId) : String(msg.senderId),
+          otherUserName: isMe ? (msg.receiverName || 'IITKian') : (msg.senderName || 'IITKian'),
           productId: msg.productId || '',
           lastMessage: msg.text || 'New message',
           updatedAt: msg.createdAt || new Date().toISOString(),
-          unread: String(msg.receiverId) === String(auth.user.id),
+          unread: !isMe,
           product: msg.product || null,
         };
 
@@ -70,7 +71,9 @@ export default function ChatInbox({ onClose }) {
     };
 
     socket.on('chat:message', handler);
-    return () => socket.off('chat:message', handler);
+    return () => {
+      socket.off('chat:message', handler);
+    };
   }, [auth, socket]);
 
   return (
@@ -103,7 +106,7 @@ export default function ChatInbox({ onClose }) {
               const product =
                 all_product.find((item) => String(getProductId(item)) === String(chat.productId)) ||
                 chat.product ||
-                { name: 'Product Inquiry', _id: chat.productId || '', image: '', new_price: 0, status: 'available' };
+                { name: 'Product Inquiry', _id: chat.productId || '', images: [], new_price: 0, status: 'unknown' };
 
               return (
               <div
@@ -124,7 +127,7 @@ export default function ChatInbox({ onClose }) {
                     </span>
                   </div>
                   <p className="text-xs font-semibold text-royal truncate mb-0.5">
-                    📦 {chat.product?.name || 'Product Inquiry'}
+                    📦 {product.name || 'Product Inquiry'}
                   </p>
                   <p className="text-xs text-slate-500 truncate">
                     {chat.lastMessage || 'Tap to view conversation'}

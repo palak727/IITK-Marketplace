@@ -3,14 +3,14 @@ import axios from 'axios';
 const AUTH_STORAGE_KEY = 'iitk_auth';
 
 const getBaseUrl = () => {
-  const configured = import.meta.env.VITE_API_BASE_URL?.trim();
+  const configured = (import.meta.env?.VITE_API_BASE_URL || (typeof process !== 'undefined' ? process.env?.VITE_API_BASE_URL : ''))?.trim();
   if (configured) {
     return configured.replace(/\/$/, '');
   }
-  if (import.meta.env.PROD) {
+  if (import.meta.env?.PROD) {
     throw new Error('VITE_API_BASE_URL must be set for production builds.');
   }
-  if (typeof window !== 'undefined' && import.meta.env.DEV) {
+  if (typeof window !== 'undefined' && import.meta.env?.DEV) {
     return '/api';
   }
   return 'http://localhost:5000/api';
@@ -82,11 +82,7 @@ export const api = {
     return res.data;
   },
 
-  postMultipart: async (endpoint, body, token) => {
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const res = await apiClient.post(endpoint, body, { headers });
-    return res.data;
-  },
+  postMultipart: (endpoint, body, token) => api.post(endpoint, body, token),
 
   patch: async (endpoint, body, token) => {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -94,11 +90,7 @@ export const api = {
     return res.data;
   },
 
-  patchMultipart: async (endpoint, body, token) => {
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const res = await apiClient.patch(endpoint, body, { headers });
-    return res.data;
-  },
+  patchMultipart: (endpoint, body, token) => api.patch(endpoint, body, token),
 
   delete: async (endpoint, token) => {
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
@@ -133,9 +125,9 @@ export const getStatusBadge = (status) => {
 };
 
 export const resolveSocketUrl = () => {
-  const configured = import.meta.env.VITE_SOCKET_URL?.trim();
+  const configured = (import.meta.env?.VITE_SOCKET_URL || (typeof process !== 'undefined' ? process.env?.VITE_SOCKET_URL : ''))?.trim();
   if (configured) return configured.replace(/\/$/, '');
-  if (import.meta.env.PROD) {
+  if (import.meta.env?.PROD) {
     throw new Error('VITE_SOCKET_URL must be set for production builds.');
   }
   return 'http://localhost:5000';

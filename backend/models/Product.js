@@ -1,37 +1,68 @@
 import mongoose from 'mongoose';
+import { MAX_PRODUCT_IMAGES } from '../utils/productImageConfig.js';
 
 const productSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+      minlength: 2,
+      maxlength: 100,
+    },
     category: {
       type: String,
       required: true,
+      trim: true,
+      lowercase: true,
       enum: ['coolers', 'mattresses', 'cycles', 'academics', 'appliances', 'others'],
     },
-    new_price: { type: Number, required: true },
-    old_price: { type: Number, required: true },
-    description: { type: String, required: true },
-    image: { type: String, required: true },
-    images: [{ type: String }],
-    hall: { type: String, required: true, default: 'Hall 1' },
+    new_price: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 1000000,
+     },
+    old_price: {
+      type: Number,
+      min: 0,
+      max: 1000000,
+     },
+    description: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 3000,
+     },
+    images: {
+      type: [String],
+      required: true,
+      validate: {
+        validator: images =>
+        images.length >= 1 && images.length <= MAX_PRODUCT_IMAGES,
+        message: `A listing must contain 1–${MAX_PRODUCT_IMAGES} images.`,
+      },
+    },
     condition: {
       type: String,
+      trim: true,
       enum: ['Brand New', 'Barely Used', 'Heavily Used'],
       default: 'Barely Used',
     },
-    defects: [{ type: String }],
+    defects: {
+      type: String,
+      trim: true,
+      maxlength: 100,
+      default: 'No defects'
+    },
     status: {
       type: String,
       enum: ['available', 'sold'],
       default: 'available',
     },
     soldAt: { type: Date, default: null },
-    archivedAt: { type: Date, default: null },
-    sellerId: { type: String, required: true },
-    sellerName: { type: String, required: true },
-    clientRequestId: { type: String, default: undefined },
-    clientRequestHash: { type: String, default: undefined },
-    seedKey: { type: String, default: undefined },
+    sellerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    clientRequestId: String,
   },
   { timestamps: true }
 );
@@ -40,7 +71,4 @@ productSchema.index(
   { sellerId: 1, clientRequestId: 1 },
   { unique: true, partialFilterExpression: { clientRequestId: { $type: 'string' } } }
 );
-productSchema.index({ seedKey: 1 }, { unique: true, partialFilterExpression: { seedKey: { $type: 'string' } } });
-productSchema.index({ status: 1, soldAt: 1, archivedAt: 1 });
-
 export default mongoose.models.Product || mongoose.model('Product', productSchema);

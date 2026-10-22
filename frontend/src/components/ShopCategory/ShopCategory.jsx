@@ -33,8 +33,11 @@ const ShopCategoryComponent = ({
       condition: selectedCondition === 'all' ? undefined : selectedCondition,
       sort: sortBy,
     });
-    return () => setProductFilters({});
   }, [categoryName, selectedHall, selectedCondition, sortBy, setProductFilters]);
+
+  useEffect(() => {
+    return () => setProductFilters({});
+  }, [setProductFilters]);
 
   const pageCount = Math.max(1, Math.ceil(total / limit));
 
@@ -109,7 +112,17 @@ const ShopCategoryComponent = ({
       {error ? (
         <div role="alert" className="text-center py-16 glass-card">
           <p className="text-rose-700">{error}</p>
-          <button onClick={() => onRetry({ category: categoryName, page, limit })} className="btn-secondary mt-4">Retry</button>
+          <button
+            onClick={() => onRetry({
+              category: categoryName,
+              hall: selectedHall === 'all' ? undefined : selectedHall,
+              condition: selectedCondition === 'all' ? undefined : selectedCondition,
+              sort: sortBy,
+              page,
+              limit,
+            })}
+            className="btn-secondary mt-4"
+          >Retry</button>
         </div>
       ) : loading ? (
         <div role="status" className="text-center py-16 text-slate-500">Loading listings...</div>

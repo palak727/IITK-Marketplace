@@ -14,15 +14,8 @@ const ProductDisplay = ({ product }) => {
   const productId = getProductId(product);
 
   const images = useMemo(() => {
-    const normalized = [];
-    if (product.image) normalized.push(product.image);
-    if (Array.isArray(product.images)) {
-      product.images.forEach((img) => {
-        if (img && !normalized.includes(img)) normalized.push(img);
-      });
-    }
-    return normalized;
-  }, [product.image, product.images]);
+    return Array.isArray(product.images) ? product.images.filter(Boolean) : [];
+  }, [product.images]);
 
   useEffect(() => {
     if (images.length <= 1) return undefined;
@@ -35,7 +28,7 @@ const ProductDisplay = ({ product }) => {
   const badge = getStatusBadge(product.status);
   const isAvailable = product.status === 'available';
   const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
-  const sellerId = String(product?.sellerId || '');
+  const sellerId = String(product?.sellerId?._id || product?.sellerId || '');
   const isOwner = currentUserId && sellerId && currentUserId === sellerId;
 
   const handleMessage = () => {
@@ -44,7 +37,7 @@ const ProductDisplay = ({ product }) => {
       navigate('/login', { state: { from: `/product/${productId}` } });
       return;
     }
-    openChat(product, product.sellerId || 'senior-1');
+    openChat(product, product.sellerId?._id || product.sellerId || 'senior-1');
   };
 
   return (
@@ -99,10 +92,10 @@ const ProductDisplay = ({ product }) => {
         </div>
 
         <div className="space-y-3 mb-6 p-4 rounded-xl bg-slate-50 border border-slate-200/80">
-          {product.hall && (
+          {product.sellerId?.hall && (
             <div className="flex items-center gap-2 text-sm text-slate-700 font-medium">
               <MapPin size={18} className="text-amber shrink-0" />
-              Physical Pickup: <strong className="text-navy">{product.hall}</strong>
+              Physical Pickup: <strong className="text-navy">{product.sellerId.hall}</strong>
             </div>
           )}
           {product.condition && (
@@ -111,9 +104,9 @@ const ProductDisplay = ({ product }) => {
               Condition Grade: <strong className="text-navy">{product.condition}</strong>
             </div>
           )}
-          {product.sellerName && (
+          {product.sellerId?.name && (
             <p className="text-sm text-slate-600">
-              Listed by <strong className="text-navy">{product.sellerName}</strong>
+              Listed by <strong className="text-navy">{product.sellerId.name}</strong>
             </p>
           )}
         </div>
@@ -124,11 +117,7 @@ const ProductDisplay = ({ product }) => {
               <AlertCircle size={18} className="text-amber-600" />
               Condition & Defect Callouts
             </div>
-            <ul className="text-sm text-amber-800 space-y-1 pl-5 list-disc">
-              {product.defects.map((defect, i) => (
-                <li key={i}>{defect}</li>
-              ))}
-            </ul>
+            <p className="text-sm text-amber-800">{product.defects}</p>
           </div>
         )}
 

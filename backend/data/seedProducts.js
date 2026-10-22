@@ -7,17 +7,15 @@ export const seedProducts = [
     old_price: 9999,
     description:
       'Premium Symphony tower cooler equipped with i-Pure console technology, 3-side honeycomb cooling pads, and an auto-drain system. Maintained in top condition through 3 Kanpur summers in Hall 12 Room 214. Effectively cools a 30×20 ft room with high airflow efficiency. Features original heavy-duty castor wheels for smooth hostel-room repositioning and a sleek vertical profile that saves floor space.',
-    image: '/images/SymphonyCooler1.png',
     images: [
       '/images/SymphonyCooler1.png',
       '/images/SymphonyCooler2.png',
       '/images/SymphonyCooler3.png',
     ],
-    hall: 'Hall 12',
     condition: 'Barely Used',
-    defects: ['Minor lime scale on water tray', 'Honeycomb pads replaced last summer'],
+    defects: 'Minor lime scale on water tray, Honeycomb pads replaced last summer',
     status: 'available',
-    sellerName: 'Aman Sharma (Y22)',
+    sellerEmail: 'aman.sharma@iitk.ac.in',
   },
   {
     name: 'Bajaj PCF 25DLX Personal Air Cooler 24L',
@@ -26,17 +24,15 @@ export const seedProducts = [
     old_price: 4299,
     description:
       'Compact and reliable Bajaj personal cooler, custom-tailored for single-room hostel accommodation. Built with Hexacool technology pads and an anti-bacterial water tank to maintain clean airflow. Operates with low noise emission at night, making it an ideal study companion during exam season. Operated carefully for 2 summers in Hall 5 Room 107.',
-    image: '/images/BajajCooler1.png',
     images: [
       '/images/BajajCooler1.png',
       '/images/BajajCooler2.png',
       '/images/BajajCooler3.png',
     ],
-    hall: 'Hall 5',
     condition: 'Barely Used',
-    defects: ['Slight water mark on top panel', 'Remote included'],
+    defects: 'Slight water mark on top panel, Remote included',
     status: 'available',
-    sellerName: 'Priya Verma (Y22)',
+    sellerEmail: 'priya.verma@iitk.ac.in',
   },
 
   // ── CYCLES ─────────────────────────────────────────────
@@ -47,16 +43,14 @@ export const seedProducts = [
     old_price: 7499,
     description:
       'Hero Hawk 27-inch steel frame classic road bicycle. Exceptionally sturdy layout built to effortlessly handle daily campus transit across the Hall 1 → LHC → Library route. Fitted with brand new high-grip MRF tyres in July 2026. Responsive front and rear caliper brakes with a cleanly lubricated single-speed chain drivetrain.',
-    image: '/images/HeroCycle1.png',
     images: [
       '/images/HeroCycle1.png',
       '/images/HeroCycle2.png',
     ],
-    hall: 'Hall 1',
     condition: 'Barely Used',
-    defects: ['New MRF rear tyre (July 2026)', 'Small paint chip on front fork', 'Both brakes working'],
+    defects: 'New MRF rear tyre (July 2026), Small paint chip on front fork, Both brakes working',
     status: 'available',
-    sellerName: 'Rohan Gupta (Y22)',
+    sellerEmail: 'rohan.gupta@iitk.ac.in',
   },
   {
     name: 'Firefox Target 21-Speed Gear Cycle',
@@ -65,15 +59,13 @@ export const seedProducts = [
     old_price: 14999,
     description:
       'High-performance Firefox Target featuring precision Shimano 21-speed gear shifters, mechanical disc brakes on both front & rear wheels, and durable lightweight aluminium rims. Built to comfortably conquer rough terrains like the MT and Hall 13 slopes. Fully serviced and tuned up at the local campus cycle station last week. Heavy-duty lock and portable pump included at no extra cost.',
-    image: '/images/FirefoxCycle2.png',
     images: [
       '/images/FirefoxCycle2.png',
     ],
-    hall: 'Hall 13',
     condition: 'Barely Used',
-    defects: ['Shimano derailleur adjusted', 'New brake cables', 'Comes with Godrej cycle lock'],
+    defects: 'Shimano derailleur adjusted, New brake cables, Comes with Godrej cycle lock',
     status: 'available',
-    sellerName: 'Sneha Patel (Y22)',
+    sellerEmail: 'sneha.patel@iitk.ac.in',
   },
   {
     name: 'Hercules Roadeo Hank 26T MTB Cycle',
@@ -82,17 +74,15 @@ export const seedProducts = [
     old_price: 8999,
     description:
       'Hercules Roadeo Hank 26-inch mountain bike featuring smooth front suspension travel and reliable 18-speed Shimano gear setup. Structurally robust steel frame with responsive handling. Note that the rear tyre tube requires a replacement, which is reflected in the discounted pricing. Makes an excellent quick DIY project for incoming freshers who enjoy maintenance work.',
-    image: '/images/HerculesCycle1.png',
     images: [
       '/images/HerculesCycle1.png',
       '/images/HerculesCycle2.png',
       '/images/HerculesCycle3.png',
     ],
-    hall: 'GH-1',
     condition: 'Heavily Used',
-    defects: ['Rear tube punctured — needs replacement', 'Front suspension functional', 'Gear shift smooth'],
+    defects: 'Rear tube punctured — needs replacement, Front suspension functional, Gear shift smooth',
     status: 'available',
-    sellerName: 'Ananya Roy (Y22)',
+    sellerEmail: 'ananya.roy@iitk.ac.in',
   },
 
   // ── MATTRESSES ─────────────────────────────────────────
@@ -103,16 +93,14 @@ export const seedProducts = [
     old_price: 6999,
     description:
       'Sleepwell Ortho Pro 6-inch luxury bonnell spring single mattress engineered for optimal back support. Precision-sized to fit standard IITK hostel single cots (6×3 ft) seamlessly. Maintained for one academic year with a dedicated waterproof mattress protector—completely pristine with zero stains. Accompanied by its original zippered breathable cotton cover. Convenient pickup from Hall 1 Room 312.',
-    image: '/images/Matress1-1.png',
     images: [
       '/images/Matress1-1.png',
       '/images/Matress1-2.png',
     ],
-    hall: 'Hall 1',
     condition: 'Brand New',
-    defects: ['Always used with mattress protector', 'Includes zippered cotton cover'],
+    defects: 'Always used with mattress protector, Includes zippered cotton cover',
     status: 'available',
-    sellerName: 'Rohan Gupta (Y22)',
+    sellerEmail: 'rohan.gupta@iitk.ac.in',
   },
   {
     name: 'Kurlon Convenio High-Density Foam Mattress 4" (Single)',
@@ -121,16 +109,14 @@ export const seedProducts = [
     old_price: 3999,
     description:
       'Kurlon 4-inch high-density resilient foam mattress featuring advanced anti-sag architecture. Built strictly to standard IITK hostel cot dimensions. Retains firm support with zero structural dips or warping after 2 years of careful use. Professionally dry-cleaned and UV surface-sanitized prior to listing. Immediate pickup arranged from Hall 5.',
-    image: '/images/Matress2-1.png',
     images: [
       '/images/Matress2-1.png',
       '/images/Matress2-2.png',
     ],
-    hall: 'Hall 5',
     condition: 'Barely Used',
-    defects: ['Professionally dry-cleaned', 'Anti-sag core intact'],
+    defects: 'Professionally dry-cleaned, Anti-sag core intact',
     status: 'available',
-    sellerName: 'Priya Verma (Y22)',
+    sellerEmail: 'priya.verma@iitk.ac.in',
   },
 
   // ── ACADEMICS & TECH ───────────────────────────────────
@@ -141,16 +127,14 @@ export const seedProducts = [
     old_price: 1899,
     description:
       'Professional-grade engineering mini drafter combined with an unblemished A3 drafting board—mandatory requirement for TA101 and TA201 Engineering Graphics courses. Package includes clear set squares, scale protractor, precise French curves, and a technical 2B pencil kit. Utilized carefully for exactly one semester.',
-    image: '/images/Drafter1.png',
     images: [
       '/images/Drafter1.png',
       '/images/Drafter2.png',
     ],
-    hall: 'Hall 13',
     condition: 'Barely Used',
-    defects: ['Ruler edge sharp & straight', 'Complete kit — all pieces included'],
+    defects: 'Ruler edge sharp & straight, Complete kit — all pieces included',
     status: 'available',
-    sellerName: 'Sneha Patel (Y22)',
+    sellerEmail: 'sneha.patel@iitk.ac.in',
   },
   {
     name: 'White Lab Coat (L) + Safety Goggles — CHM/BIO Labs',
@@ -159,16 +143,14 @@ export const seedProducts = [
     old_price: 1200,
     description:
       'Standard-issue spotless white laboratory coat (Size Large, 42-inch chest specification) paired with impact-resistant polycarbonate chemical safety goggles. Mandatory gear for CHM101/102 Chemistry practical sessions and BIO101 modules. Laundered, neatly pressed, and equipped with a functional chest name tag slot.',
-    image: '/images/LabCoat1.png',
     images: [
       '/images/LabCoat1.png',
       '/images/LabCoat2.png',
     ],
-    hall: 'Hall 12',
     condition: 'Barely Used',
-    defects: ['Freshly ironed', 'Goggles scratch-free'],
+    defects: 'Freshly ironed, Goggles scratch-free',
     status: 'available',
-    sellerName: 'Aman Sharma (Y22)',
+    sellerEmail: 'aman.sharma@iitk.ac.in',
   },
   {
     name: 'Casio FX-991EX Classwiz Scientific Calculator',
@@ -177,16 +159,14 @@ export const seedProducts = [
     old_price: 1650,
     description:
       'Original Casio fx-991EX Classwiz calculator featuring high-resolution LCD, spreadsheet computation capability, QR code metric sharing, and 552 advanced functions. An indispensable asset for MTH101, ESC101 programming/math labs, and rigorous engineering curriculum examinations. Internal cell battery freshly swapped out—displays zero pixel fade. Hard protective slide-case fully intact.',
-    image: '/images/Calc1.png',
     images: [
       '/images/Calc1.png',
       '/images/Calc2.png',
     ],
-    hall: 'Hall 5',
     condition: 'Brand New',
-    defects: ['New battery (July 2026)', 'Slide cover included'],
+    defects: 'New battery (July 2026), Slide cover included',
     status: 'available',
-    sellerName: 'Priya Verma (Y22)',
+    sellerEmail: 'priya.verma@iitk.ac.in',
   },
   {
     name: 'Philips LED Desk Study Lamp (Foldable, USB-C)',
@@ -195,16 +175,14 @@ export const seedProducts = [
     old_price: 1799,
     description:
       'Philips 12W professional LED desk lamp offering 3 granular touch-controlled brightness levels along with customized warm, cool, and daylight temperature modes. Ergonomic foldable arm profile optimized for compact hostel study tables. Powered conveniently via a modern USB-C charging port on the base. Integrated with eye-care anti-flicker technology designed for prolonged reading and coding sessions.',
-    image: '/images/Lamp1.png',
     images: [
       '/images/Lamp1.png',
       '/images/Lamp2.png',
     ],
-    hall: 'GH-1',
     condition: 'Barely Used',
-    defects: ['All 3 brightness modes working', 'USB-C cable included'],
+    defects: 'All 3 brightness modes working, USB-C cable included',
     status: 'available',
-    sellerName: 'Ananya Roy (Y22)',
+    sellerEmail: 'ananya.roy@iitk.ac.in',
   },
   {
     name: 'Havells Caro 1.5L Electric Kettle (Stainless Steel)',
@@ -213,16 +191,14 @@ export const seedProducts = [
     old_price: 1399,
     description:
       'Havells 1500W heavy-duty food-grade stainless steel electric kettle featuring dry-boil protection, automatic thermal cut-off, and an insulated cool-touch handle. An absolute essential utility item for late-night hostel study snacks and quick morning coffee/tea brewing. Designed with a concealed heating element for effortless scale cleaning.',
-    image: '/images/Kettle1.png',
     images: [
       '/images/Kettle1.png',
       '/images/Kettle2.png',
     ],
-    hall: 'Hall 12',
     condition: 'Barely Used',
-    defects: ['Auto cut-off working', 'No lime buildup', 'Original box available'],
+    defects: 'Auto cut-off working, No lime buildup, Original box available',
     status: 'sold',
-    sellerName: 'Aman Sharma (Y22)',
+    sellerEmail: 'aman.sharma@iitk.ac.in',
   },
   {
     name: 'Thomas Calculus 14th Ed + Griffiths Electrodynamics ',
@@ -231,15 +207,13 @@ export const seedProducts = [
     old_price: 2800,
     description:
       'Comprehensive MTH101 and PHY103 course textbook bundle containing: Thomas Calculus 14th Edition (authorized Pearson hardcover print) and Introduction to Electrodynamics by David J. Griffiths (4th Edition). ',
-    image: '/images/Book1.png',
     images: [
       '/images/Book1.png',
       '/images/Book2.png',
     ],
-    hall: 'Hall 13',
     condition: 'Barely Used',
-    defects: ['Pencil highlights in Griffiths Ch.3-5', 'Thomas spine intact', 'PYQ notes (2023-25) included free'],
+    defects: 'Pencil highlights in Griffiths Ch.3-5, Thomas spine intact, PYQ notes (2023-25) included free',
     status: 'available',
-    sellerName: 'Sneha Patel (Y22)',
+    sellerEmail: 'sneha.patel@iitk.ac.in',
   },
 ];

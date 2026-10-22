@@ -78,7 +78,7 @@ const CartComponent = () => {
               className="glass-card p-4 flex flex-col sm:flex-row items-center gap-4 border border-slate-200"
             >
               <div className="w-24 h-24 rounded-xl overflow-hidden shrink-0 border border-slate-100">
-                <LazyImage src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                <LazyImage src={product.images?.[0]} alt={product.name} className="w-full h-full object-cover" />
               </div>
 
               <div className="flex-1 min-w-0 text-center sm:text-left">
@@ -87,9 +87,9 @@ const CartComponent = () => {
                 </Link>
                 <div className="flex items-center gap-2 mt-1 justify-center sm:justify-start">
                   <span className="text-xs text-slate-500 flex items-center gap-1">
-                    <MapPin size={12} className="text-amber" /> Pickup: <strong>{product.hall}</strong>
+                    <MapPin size={12} className="text-amber" /> Pickup: <strong>{product.sellerId?.hall}</strong>
                   </span>
-                  <span className="text-xs text-slate-400">• Seller: {product.sellerName}</span>
+                  <span className="text-xs text-slate-400">• Seller: {product.sellerId?.name}</span>
                 </div>
                 <div className="mt-2 text-sm font-bold text-royal">
                   {formatPrice(product.new_price)}

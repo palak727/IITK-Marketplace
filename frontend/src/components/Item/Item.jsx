@@ -7,9 +7,8 @@ const Item = ({ product = {} }) => {
   const productId = getProductId(product);
   const badge = getStatusBadge(product.status);
 
-  const displayImage = 
-    product.image || 
-    (Array.isArray(product.images) && product.images.length > 0 ? product.images[0] : null) || 
+  const displayImage =
+    product.images?.[0] ||
     'https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80';
 
   return (
@@ -28,10 +27,10 @@ const Item = ({ product = {} }) => {
             {badge.label}
           </span>
         </div>
-        {product.hall && (
+        {product.sellerId?.hall && (
           <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-md px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 flex items-center gap-1 shadow-sm">
             <MapPin size={12} className="text-amber" />
-            {product.hall}
+            {product.sellerId.hall}
           </div>
         )}
       </div>

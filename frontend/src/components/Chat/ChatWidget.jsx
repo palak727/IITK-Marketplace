@@ -16,7 +16,7 @@ const ChatWidget = () => {
   const bottomRef = useRef(null);
 
   const currentUserId = String(auth?.user?.id || auth?.user?._id || '');
-  const sellerId = String(activeChat?.sellerId || activeChat?.product?.sellerId || '');
+  const sellerId = String(activeChat?.sellerId || activeChat?.product?.sellerId?._id || activeChat?.product?.sellerId || '');
   const isOnline = sellerId ? onlineUsers[sellerId] : false;
 
   useEffect(() => {
@@ -135,7 +135,7 @@ const ChatWidget = () => {
           <div className="flex items-center gap-2.5">
             <div className="relative">
               <div className="w-9 h-9 rounded-full bg-royal text-white font-bold text-sm flex items-center justify-center">
-                {(activeChat.sellerName || 'S').charAt(0)}
+                {(activeChat.sellerName || activeChat.product?.sellerId?.name || 'S').charAt(0)}
               </div>
               <Circle
                 size={10}
@@ -145,7 +145,7 @@ const ChatWidget = () => {
               />
             </div>
             <div>
-              <p className="font-bold text-sm leading-tight">{activeChat.sellerName || 'Senior Seller'}</p>
+              <p className="font-bold text-sm leading-tight">{activeChat.sellerName || activeChat.product?.sellerId?.name || 'Senior Seller'}</p>
               <p className="text-[11px] text-slate-300">
                 {isOnline ? 'Online now' : 'IITK Student'} · Direct Buyer-Seller Chat
               </p>
@@ -158,16 +158,16 @@ const ChatWidget = () => {
 
         <div className="p-3 border-b border-slate-200 bg-slate-50/80 flex gap-3 items-center">
           <div className="w-14 h-14 rounded-xl overflow-hidden shrink-0 border border-slate-200">
-            <LazyImage src={activeChat.product?.image} alt="" className="w-full h-full" />
+            <LazyImage src={activeChat.product?.images?.[0]} alt="" className="w-full h-full" />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 mb-0.5">
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.className}`}>
                 {badge.label}
               </span>
-              {activeChat.product?.hall && (
+              {activeChat.product?.sellerId?.hall && (
                 <span className="text-[10px] text-slate-500 flex items-center gap-0.5">
-                  <MapPin size={10} /> {activeChat.product.hall}
+                  <MapPin size={10} /> {activeChat.product.sellerId.hall}
                 </span>
               )}
             </div>

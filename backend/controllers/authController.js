@@ -76,7 +76,7 @@ export const verifyOTP = async (req, res) => {
 // Forgot / Reset Password OTP
 export const requestResetOTP = async (req, res) => {
   const genericResponse = {
-    message: 'If the account exists, a reset code will be sent when email delivery is available.'
+    message: 'Sending OTP...'
   };
   let cleanEmail;
   let otp;
@@ -180,9 +180,10 @@ export const register = async (req, res) => {
     if (year !== undefined && (typeof year !== 'string' || cleanYear.length > 20))
       return res.status(400).json({ message: 'Year must be at most 20 characters.' });
 
-    const hashedPassword = await bcrypt.hash(password, 10);
     if (await User.exists({ email: cleanEmail }))
       return res.status(400).json({ message: 'User with this IITK email already exists.' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     await consumeVerifiedOTP(cleanEmail, 'register');
 

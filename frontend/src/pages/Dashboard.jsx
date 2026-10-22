@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
-import { Plus, Package, Upload, MapPin, Tag, AlertCircle, ImageOff, Pencil, Check, X } from 'lucide-react';
+import { Plus, Package, Upload, Tag, AlertCircle, ImageOff, Pencil, Check, X } from 'lucide-react';
 import LazyImage from '../components/LazyImage/LazyImage';
 import { useShop } from '../context/ShopContext';
-import { api, CONDITIONS, CATEGORIES, formatPrice, getProductId, getStatusBadge, HALLS } from '../utils/api';
+import { api, CONDITIONS, CATEGORIES, formatPrice, getProductId, getStatusBadge } from '../utils/api';
 import { MAX_IMAGE_BYTES, MAX_PRODUCT_IMAGES, MAX_TOTAL_UPLOAD_BYTES, PRODUCT_IMAGE_TYPES } from '../utils/productImageConfig';
+import { validateProductForm } from '../utils/productValidation';
 
 const INITIAL_FORM_STATE = {
   name: '',
@@ -13,10 +14,8 @@ const INITIAL_FORM_STATE = {
   category: 'coolers',
   new_price: '',
   old_price: '',
-  hall: 'Hall 12',
   condition: 'Barely Used',
   defects: '',
-  image: '',
   images: [],
 };
 
@@ -30,14 +29,13 @@ const Dashboard = () => {
   const [showForm, setShowForm] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [filePreviews, setFilePreviews] = useState([]);
-  const [form, setForm] = useState({
-    ...INITIAL_FORM_STATE,
-    hall: auth?.user?.hall || 'Hall 12',
-  });
+  const [form, setForm] = useState({ ...INITIAL_FORM_STATE });
+  const [touchedFields, setTouchedFields] = useState({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [createRequestId, setCreateRequestId] = useState(newRequestId);
-
   useEffect(() => {
     const previews = selectedFiles.map((file) => URL.createObjectURL(file));
     setFilePreviews(previews);
@@ -63,8 +61,12 @@ const Dashboard = () => {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
+    setFormError('');
     if (!editingProduct) setCreateRequestId(newRequestId());
   };
+  const fieldErrors = validateProductForm(form);
+  const visibleFieldError = (field) =>
+    touchedFields[field] || submitAttempted ? fieldErrors[field] : '';
 
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -89,8 +91,11 @@ const Dashboard = () => {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!form.name.trim() || form.new_price === '' || saving) {
-      toast.error('Item name and selling price are required');
+    setSubmitAttempted(true);
+    if (saving) return;
+    if (Object.keys(validateProductForm(form)).length) return;
+    if (form.images.length + selectedFiles.length === 0) {
+      setFormError('Please upload at least one product image.');
       return;
     }
 
@@ -99,10 +104,9 @@ const Dashboard = () => {
       const payload = {
         ...form,
         new_price: Number(form.new_price),
-        old_price: form.old_price ? Number(form.old_price) : Number(form.new_price) * 1.3,
-        defects: form.defects ? form.defects.split(',').map((d) => d.trim()).filter(Boolean) : [],
+        old_price: form.old_price !== '' && form.old_price !== null ? Number(form.old_price) : '',
+        defects: form.defects.trim(),
         images: form.images,
-        image: form.images[0] || '',
         ...(editingProduct ? {} : { clientRequestId: createRequestId }),
       };
 
@@ -115,13 +119,14 @@ const Dashboard = () => {
       setShowForm(false);
       setEditingProduct(null);
       setSelectedFiles([]);
+      setTouchedFields({});
+      setSubmitAttempted(false);
+      setFormError('');
       setCreateRequestId(newRequestId());
-      setForm({
-        ...INITIAL_FORM_STATE,
-        hall: auth?.user?.hall || 'Hall 12',
-      });
+      setForm({ ...INITIAL_FORM_STATE });
       toast.success(editingProduct ? 'Listing updated successfully!' : 'Listing published successfully!');
     } catch (err) {
+      setFormError(err.message || 'Failed to save listing.');
       toast.error(err.message || 'Failed to create listing');
     } finally {
       setSaving(false);
@@ -144,20 +149,21 @@ const Dashboard = () => {
     setEditingProduct(product);
     setCreateRequestId('');
     setSelectedFiles([]);
+    setTouchedFields({});
+    setSubmitAttempted(false);
+    setFormError('');
     setForm({
       ...INITIAL_FORM_STATE,
       ...product,
-      images: product.images?.length ? product.images : (product.image ? [product.image] : []),
-      defects: Array.isArray(product.defects) ? product.defects.join(', ') : '',
-      hall: product.hall || auth?.user?.hall || 'Hall 12',
-      image: product.image || '',
+      images: Array.isArray(product.images) ? product.images : [],
+      defects: product.defects || '',
     });
     setShowForm(true);
   };
 
   const handleDeleteProduct = async (product) => {
     const productId = getProductId(product);
-    if (!window.confirm(`Remove "${product.name}" from the marketplace? Its history will be retained.`)) return;
+    if (!window.confirm(`Permanently delete "${product.name}" from the marketplace?`)) return;
 
     try {
       await deleteProduct(productId);
@@ -174,7 +180,7 @@ const Dashboard = () => {
         <div>
           <h1 className="text-3xl font-extrabold text-navy">Your listings</h1>
           <p className="text-slate-500 text-sm">
-            Manage your campus items, {auth.user.name} ({auth.user.hall || 'Hall 12'})
+            Manage your campus items, {auth?.user?.name || 'Seller'} ({auth?.user?.hall || 'Hall 12'})
           </p>
         </div>
         <button 
@@ -182,8 +188,11 @@ const Dashboard = () => {
             if (showForm) {
               setEditingProduct(null);
               setSelectedFiles([]);
+              setTouchedFields({});
+              setSubmitAttempted(false);
+              setFormError('');
               setCreateRequestId(newRequestId());
-              setForm({ ...INITIAL_FORM_STATE, hall: auth?.user?.hall || 'Hall 12' });
+              setForm({ ...INITIAL_FORM_STATE });
             }
             setShowForm(!showForm);
           }}
@@ -199,11 +208,14 @@ const Dashboard = () => {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           onSubmit={handleCreate}
+          noValidate
           className="glass-card p-6 md:p-8 mb-8 space-y-4 border border-slate-200"
         >
           <h2 className="font-bold text-xl text-navy pb-2 border-b border-slate-100 flex items-center gap-2">
             <Package size={20} className="text-royal" /> {editingProduct ? 'Edit Listing' : 'List a Campus Essential'}
           </h2>
+
+          {formError && <p role="alert" className="text-sm text-rose-700">{formError}</p>}
 
           <div className="grid sm:grid-cols-2 gap-4">
             <div>
@@ -212,21 +224,27 @@ const Dashboard = () => {
                 name="name"
                 value={form.name}
                 onChange={handleChange}
+                onBlur={() => setTouchedFields((prev) => ({ ...prev, name: true }))}
                 placeholder="e.g. Symphony 70L Cooler or Hero Cycle"
                 required
+                minLength={2}
+                maxLength={100}
+                aria-invalid={Boolean(visibleFieldError('name'))}
                 className="input-field"
               />
+              {visibleFieldError('name') && <p className="mt-1 text-xs text-rose-700">{visibleFieldError('name')}</p>}
             </div>
 
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Category *</label>
-              <select name="category" value={form.category} onChange={handleChange} className="input-field">
+              <select name="category" value={form.category} onChange={handleChange} onBlur={() => setTouchedFields((prev) => ({ ...prev, category: true }))} required aria-invalid={Boolean(visibleFieldError('category'))} className="input-field">
                 {CATEGORIES.map((c) => (
                   <option key={c.slug} value={c.slug}>
                     {c.label}
                   </option>
                 ))}
               </select>
+              {visibleFieldError('category') && <p className="mt-1 text-xs text-rose-700">{visibleFieldError('category')}</p>}
             </div>
 
             <div>
@@ -235,13 +253,17 @@ const Dashboard = () => {
                 name="new_price"
                 type="number"
                 min="0"
-                max="100000000"
+                max="1000000"
+                step="any"
                 value={form.new_price}
                 onChange={handleChange}
+                onBlur={() => setTouchedFields((prev) => ({ ...prev, new_price: true }))}
                 placeholder="Selling price"
                 required
+                aria-invalid={Boolean(visibleFieldError('new_price'))}
                 className="input-field"
               />
+              {visibleFieldError('new_price') && <p className="mt-1 text-xs text-rose-700">{visibleFieldError('new_price')}</p>}
             </div>
 
             <div>
@@ -250,38 +272,30 @@ const Dashboard = () => {
                 name="old_price"
                 type="number"
                 min="0"
-                max="100000000"
+                max="1000000"
+                step="any"
                 value={form.old_price}
                 onChange={handleChange}
+                onBlur={() => setTouchedFields((prev) => ({ ...prev, old_price: true }))}
                 placeholder="Original purchase price"
+                aria-invalid={Boolean(visibleFieldError('old_price'))}
                 className="input-field"
               />
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-                <MapPin size={12} className="text-amber" /> Hall of Residence Pickup *
-              </label>
-              <select name="hall" value={form.hall} onChange={handleChange} className="input-field">
-                {HALLS.map((h) => (
-                  <option key={h} value={h}>
-                    {h}
-                  </option>
-                ))}
-              </select>
+              {visibleFieldError('old_price') && <p className="mt-1 text-xs text-rose-700">{visibleFieldError('old_price')}</p>}
             </div>
 
             <div>
               <label className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
                 <Tag size={12} className="text-royal" /> Condition Grade *
               </label>
-              <select name="condition" value={form.condition} onChange={handleChange} className="input-field">
+              <select name="condition" value={form.condition} onChange={handleChange} onBlur={() => setTouchedFields((prev) => ({ ...prev, condition: true }))} required aria-invalid={Boolean(visibleFieldError('condition'))} className="input-field">
                 {CONDITIONS.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
                 ))}
               </select>
+              {visibleFieldError('condition') && <p className="mt-1 text-xs text-rose-700">{visibleFieldError('condition')}</p>}
             </div>
           </div>
 
@@ -299,14 +313,17 @@ const Dashboard = () => {
                   <LazyImage src={src} alt={`Listing image ${index + 1}`} className="w-full h-full object-cover" />
                   <button type="button" aria-label={`Remove image ${index + 1}`} onClick={() => setForm((current) => {
                     const images = current.images.filter((_, imageIndex) => imageIndex !== index);
-                    return { ...current, images, image: images[0] || '' };
+                    return { ...current, images };
                   })} className="absolute top-1 right-1 rounded-full bg-white/90 p-1 text-rose-700"><X size={13} /></button>
                 </div>
               ))}
               {filePreviews.map((src, index) => (
                 <div key={`new-${src}`} className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-200">
                   <LazyImage src={src} alt={`New listing image ${index + 1}`} className="w-full h-full object-cover" />
-                  <button type="button" aria-label={`Remove new image ${index + 1}`} onClick={() => setSelectedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))} className="absolute top-1 right-1 rounded-full bg-white/90 p-1 text-rose-700"><X size={13} /></button>
+                  <button type="button" aria-label={`Remove new image ${index + 1}`} onClick={() => {
+                    setSelectedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+                    if (!editingProduct) setCreateRequestId(newRequestId());
+                  }} className="absolute top-1 right-1 rounded-full bg-white/90 p-1 text-rose-700"><X size={13} /></button>
                 </div>
               ))}
             </div>
@@ -314,27 +331,36 @@ const Dashboard = () => {
 
           <div>
             <label className="text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
-              <AlertCircle size={12} className="text-amber" /> Known Defects / Tags (comma separated)
+              <AlertCircle size={12} className="text-amber" />               Known Defects (up to 100 characters)
             </label>
             <input
               name="defects"
               value={form.defects}
+              maxLength={100}
               onChange={handleChange}
-              placeholder="e.g. Minor dust, Power cord included, Serviced last month"
+              onBlur={() => setTouchedFields((prev) => ({ ...prev, defects: true }))}
+              aria-invalid={Boolean(visibleFieldError('defects'))}
+              placeholder="Describe any known defects"
               className="input-field"
             />
+            {visibleFieldError('defects') && <p className="mt-1 text-xs text-rose-700">{visibleFieldError('defects')}</p>}
           </div>
 
           <div>
-            <label className="text-xs font-bold text-slate-700 block mb-1">Item Description</label>
+            <label className="text-xs font-bold text-slate-700 block mb-1">Item Description *</label>
             <textarea
               name="description"
               value={form.description}
               onChange={handleChange}
+              onBlur={() => setTouchedFields((prev) => ({ ...prev, description: true }))}
               placeholder="Provide details about condition, usage time, and pickup availability..."
               rows={3}
+              required
+              maxLength={3000}
+              aria-invalid={Boolean(visibleFieldError('description'))}
               className="input-field resize-none"
             />
+            {visibleFieldError('description') && <p className="mt-1 text-xs text-rose-700">{visibleFieldError('description')}</p>}
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -347,8 +373,11 @@ const Dashboard = () => {
                 setShowForm(false);
                 setEditingProduct(null);
                 setSelectedFiles([]);
+                setTouchedFields({});
+                setSubmitAttempted(false);
+                setFormError('');
                 setCreateRequestId(newRequestId());
-                setForm({ ...INITIAL_FORM_STATE, hall: auth?.user?.hall || 'Hall 12' });
+                setForm({ ...INITIAL_FORM_STATE });
               }}
               className="px-6 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 font-semibold text-slate-700"
             >
@@ -375,9 +404,7 @@ const Dashboard = () => {
         <div className="space-y-4">
             <h2 className="text-lg font-bold text-navy mb-2">Your Listings ({products.length})</h2>
           {products.map((product) => {
-            const badge = product.archivedAt
-              ? { label: 'Archived', className: 'bg-slate-100 text-slate-600 border border-slate-200' }
-              : getStatusBadge(product.status);
+            const badge = getStatusBadge(product.status);
             const productId = getProductId(product);
 
             return (
@@ -388,8 +415,8 @@ const Dashboard = () => {
               >
                 <div className="flex items-center gap-4 min-w-0 w-full sm:w-auto">
                   <div className="w-20 h-20 rounded-xl overflow-hidden shrink-0 border border-slate-100 flex items-center justify-center bg-slate-50 text-slate-400">
-                    {product.image ? (
-                      <LazyImage src={product.image} alt={product.name} className="w-full h-full object-contain" />
+                    {product.images?.[0] ? (
+                      <LazyImage src={product.images[0]} alt={product.name} className="w-full h-full object-contain" />
                     ) : (
                       <ImageOff size={24} />
                     )}
@@ -401,25 +428,25 @@ const Dashboard = () => {
                       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.className}`}>
                         {badge.label}
                       </span>
-                      <span className="text-xs text-slate-500 font-semibold">{product.hall}</span>
+                      <span className="text-xs text-slate-500 font-semibold">{product.sellerId?.hall}</span>
                       <span className="text-xs text-slate-400">• {product.condition}</span>
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-3 sm:pt-0">
-                  {!product.archivedAt && product.status === 'available' && (
+                  {product.status === 'available' && (
                     <>
                       <button onClick={() => beginEdit(product)} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-navy" title="Edit listing"><Pencil size={15} /> Edit</button>
                       <button onClick={() => handleStatus(product, 'sold')} className="flex items-center gap-1 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-800" title="Mark sold"><Check size={15} /> Mark sold</button>
                     </>
                   )}
-                  {!product.archivedAt && <button
+                  <button
                     onClick={() => handleDeleteProduct(product)}
                     className="px-4 py-2 rounded-xl border border-rose-200 bg-rose-50 text-xs font-bold text-rose-700 hover:bg-rose-100 shrink-0 shadow-sm"
                   >
                     Delete
-                  </button>}
+                  </button>
                 </div>
               </motion.div>
             );
