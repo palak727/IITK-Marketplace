@@ -33,8 +33,8 @@ const Shop = () => {
           <div className="text-center py-16 glass-card">
             <p className="text-slate-500">
               {searchQuery
-                ? 'No campus items match your search. Try searching for "cooler", "cycle", or "Hall 12".'
-                : 'No campus items are available right now.'}
+                ? 'No  items match your search. Please try searching something else.'
+                : 'No items are available right now.'}
             </p>
           </div>
         ) : (

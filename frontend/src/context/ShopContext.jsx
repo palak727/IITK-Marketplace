@@ -171,7 +171,6 @@ const ShopContextProvider = ({ children }) => {
       return undefined;
     }
 
-    // Render hosts a persistent Socket.IO server for real-time chat.
     let s;
     try {
       s = io(resolveSocketUrl(), { auth: { token }, transports: ['websocket', 'polling'] });

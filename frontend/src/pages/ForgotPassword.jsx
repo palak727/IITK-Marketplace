@@ -29,7 +29,7 @@ const ForgotPassword = () => {
     setLoading(true);
     try {
       const result = await requestResetOTP(email);
-      toast.success(result?.message || 'If the account exists, a reset code will be sent when email delivery is available.');
+      toast.success(result?.message || 'Sending OTP....');
       setStep(2);
     } catch (err) {
       const errorMessage = err.response?.data?.message || err.message || 'Failed to send OTP';
@@ -111,7 +111,7 @@ const ForgotPassword = () => {
                 />
               </div>
               {email && !isIITKEmail && (
-                <p className="text-[11px] text-red-500 font-medium mt-1">⚠️ Email must end with @iitk.ac.in</p>
+                <p className="text-[11px] text-red-500 font-medium mt-1"> Email must end with @iitk.ac.in</p>
               )}
             </div>
 

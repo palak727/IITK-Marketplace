@@ -123,33 +123,17 @@ const deleteProductImages = async (images) => {
 };
 
 const getProductErrorResponse = (error, fallbackMessage) => {
-  const validationError =  error instanceof mongoose.Error.ValidationError || error instanceof mongoose.Error.CastError;
+  const validationError = error instanceof mongoose.Error.ValidationError || error instanceof mongoose.Error.CastError;
+  const status = error.status || (validationError ? 400 : 500);
   return {
-    status: error.status || (validationError ? 400 : 500),
-    message: error.status || validationError ? error.message : fallbackMessage,
+    status,
+    message: error.message || fallbackMessage,
   };
 };
 const toPublicProduct = (product) => {
   const publicProduct = product?.toObject?.() ?? { ...product };
   delete publicProduct.clientRequestId;
   return publicProduct;
-};
-const populateProductSellers = async (products) => {
-  const sellerIds = [...new Set(products
-    .map((product) => String(product.sellerId || ''))
-    .filter(mongoose.isValidObjectId))];
-  const sellers = sellerIds.length
-    ? await User.find({ _id: { $in: sellerIds } }).select('_id name hall year').lean()
-    : [];
-  const sellersById = new Map(sellers.map((seller) => [String(seller._id), seller]));
-  return products.map((product) => {
-    const result = product?.toObject?.() ?? { ...product };
-    const seller = sellersById.get(String(result.sellerId || ''));
-    result.sellerId = seller
-      ? { _id: seller._id, name: seller.name, hall: seller.hall, year: seller.year }
-      : null;
-    return result;
-  });
 };
 
 export const validateProductFields = (values) => {
@@ -212,10 +196,10 @@ export const getProducts = async (req, res) => {
     const sortOrder = sort === 'price-low' ? { new_price: 1, createdAt: -1 } :
       sort === 'price-high' ? { new_price: -1, createdAt: -1 } : { createdAt: -1 };
     const [rawList, total] = await Promise.all([
-      Product.find(filter).sort(sortOrder).skip((page - 1) * limit).limit(limit).lean(),
+      Product.find(filter).populate('sellerId', 'name hall year').sort(sortOrder).skip((page - 1) * limit).limit(limit).lean(),
       Product.countDocuments(filter),
     ]);
-    const list = (await populateProductSellers(rawList)).map(toPublicProduct);
+    const list = rawList.map(toPublicProduct);
     return res.json({ products: list, total, page, limit });
   } catch (error) {
     console.error('Product list failed:', error);
@@ -227,10 +211,10 @@ export const getProductById = async (req, res) => {
   try {
     const { id } = req.params;
     if (!mongoose.isValidObjectId(id)) return res.status(404).json({ message: 'Product not found' });
-    const item = await Product.findById(id);
-    if (!item || item.status !== 'available') return res.status(404).json({ message: 'Product not found' });
-    const [product] = await populateProductSellers([item]);
-    return res.json(toPublicProduct(product));
+    const item = await Product.findById(id).populate('sellerId', 'name hall year');
+    if (!item || item.status !== 'available') 
+      return res.status(404).json({ message: 'Product not found' });
+    return res.json(toPublicProduct(item));
   } catch (error) {
     console.error('Product lookup failed:', error);
     return res.status(500).json({ message: 'Unable to load this product right now.' });
@@ -240,7 +224,7 @@ export const getProductById = async (req, res) => {
 export const createProduct = async (req, res) => {
   const body = req.body || {};
   const submittedImages = parseImageList(body.images);
-  if (submittedImages === null) return res.status(400).json({ message: 'Images must be a list of valid image URLs.' });
+  if (submittedImages === null) return res.status(400).json({ message: 'Atleast one valid image is required.' });
   const files = req.files || [];
   const payload = {
     name: body.name,
@@ -253,7 +237,7 @@ export const createProduct = async (req, res) => {
     images: submittedImages ?? [],
   };
   if (files.length && payload.images.length + files.length > MAX_PRODUCT_IMAGES) {
-    return res.status(400).json({ message: 'Provide up to 4 valid images.' });
+    return res.status(400).json({ message: 'Max 4 valid images are allowed.' });
   }
   const errors = validateProductFields(payload);
   if (errors.length) return res.status(400).json({ message: errors[0] });
@@ -269,10 +253,9 @@ export const createProduct = async (req, res) => {
 
   try {
     if (clientRequestId) {
-      const existing = await Product.findOne({ sellerId: req.user.id, clientRequestId }).lean();
+      const existing = await Product.findOne({ sellerId: req.user.id, clientRequestId }).populate('sellerId', 'name hall year').lean();
       if (existing) {
-        const [product] = await populateProductSellers([existing]);
-        return res.status(200).json(toPublicProduct(product));
+        return res.status(200).json(toPublicProduct(existing));
       }
     }
     const uploaded = await uploadProductImages(files);
@@ -284,17 +267,15 @@ export const createProduct = async (req, res) => {
       return res.status(400).json({ message: 'Please upload at least one product image.' });
     }
     const newProduct = await Product.create(payload);
-    const [product] = await populateProductSellers([newProduct]);
-    return res.status(201).json(toPublicProduct(product));
+    await newProduct.populate('sellerId', 'name hall year');
+    return res.status(201).json(toPublicProduct(newProduct));
   } catch (error) {
     await deleteUploadedImages(uploadedPublicIds);
     if (error.code === 11000 && clientRequestId) {
       try {
-        const existing = await Product.findOne({ sellerId: req.user.id, clientRequestId }).lean();
-        if (existing) {
-          const [product] = await populateProductSellers([existing]);
-          return res.status(200).json(toPublicProduct(product));
-        }
+        const existing = await Product.findOne({sellerId: req.user.id,clientRequestId}).populate('sellerId', 'name hall year').lean();
+        if (existing)  
+          return res.status(200).json(toPublicProduct(existing));
       } catch (lookupError) {
         console.error('Idempotency lookup failed:', lookupError);
       }
@@ -309,64 +290,70 @@ export const updateProduct = async (req, res) => {
   const { id } = req.params;
   const body = req.body || {};
   const fields = ['name', 'category', 'new_price', 'old_price', 'description', 'condition', 'defects', 'images'];
-  let updates = Object.fromEntries(
+  const updates = Object.fromEntries(
     fields.filter((field) => Object.hasOwn(body, field)).map((field) => [field, body[field]])
   );
-  const unsetFields = {};
   const files = req.files || [];
-  if (!Object.keys(updates).length && !files.length) return res.status(400).json({ message: 'No listing fields provided.' });
+  let uploadedPublicIds = [];
+  if (!Object.keys(updates).length && !files.length)  return res.status(400).json({ message: 'No listing fields provided.' });
+
   if (Object.hasOwn(updates, 'images')) {
     updates.images = parseImageList(updates.images);
     if (updates.images === null) return res.status(400).json({ message: 'Images must be a list of valid image URLs.' });
   }
-  const errors = validateProductFields(updates);
-  if (errors.length) return res.status(400).json({ message: errors[0] });
   if (updates.old_price === '' || updates.old_price === null) {
     delete updates.old_price;
-    unsetFields.old_price = '';
   }
+  const errors = validateProductFields(updates);
+  if (errors.length) return res.status(400).json({ message: errors[0] });
 
-  let uploadedPublicIds = [];
   try {
-    if (!mongoose.isValidObjectId(id)) return res.status(404).json({ message: 'Product not found.' });
-    const existingProduct = await Product.findOne(availableProductFilter({ _id: id, sellerId: req.user.id })).lean();
-    if (!existingProduct) {
-      const existing = await Product.findById(id).select('sellerId status').lean();
-      if (!existing) return res.status(404).json({ message: 'Product not found.' });
-      if (String(existing.sellerId) !== String(req.user.id)) return res.status(403).json({ message: 'You cannot edit another seller listing.' });
+    if (!mongoose.isValidObjectId(id)) {
+      return res.status(404).json({ message: 'Product not found.' });
+    }
+    const existing = await Product.findById(id).lean();
+
+    if (!existing) return res.status(404).json({ message: 'Product not found.' });
+    if (String(existing.sellerId) !== String(req.user.id)) {
+      return res.status(403).json({ message: 'You cannot edit another seller listing.' });
+    }
+    if (existing.status !== 'available') {
       return res.status(409).json({ message: 'Only available listings can be edited.' });
     }
-    const originalImages = existingProduct.images || [];
+    const originalImages = existing.images || [];
     const selectedImages = updates.images ?? originalImages;
     if (selectedImages.length + files.length > MAX_PRODUCT_IMAGES) {
       return res.status(400).json({ message: 'A listing can contain at most 4 images.' });
     }
     const uploaded = await uploadProductImages(files);
     uploadedPublicIds = uploaded.publicIds;
-    const nextImages = [...new Set([...selectedImages, ...uploaded.images])];
-    if (nextImages.length === 0) {
-      await deleteUploadedImages(uploadedPublicIds);
-      uploadedPublicIds = [];
-      return res.status(400).json({ message: 'Please upload at least one product image.' });
+    if (Object.hasOwn(updates, 'images') || files.length) {
+      updates.images = [...new Set([...selectedImages, ...uploaded.images])];
     }
-    if (Object.hasOwn(updates, 'images') || files.length) updates.images = nextImages;
+
+    if (!updates.images && originalImages.length === 0) return res.status(400).json({ message: 'Please upload at least one product image.' });
+    if (updates.images?.length === 0) return res.status(400).json({ message: 'Please upload at least one product image.' });
+    
     const update = {
       ...(Object.keys(updates).length ? { $set: updates } : {}),
-      ...(Object.keys(unsetFields).length ? { $unset: unsetFields } : {}),
+      ...(updates.old_price === undefined && (body.old_price === '' || body.old_price === null)
+        ? { $unset: { old_price: '' } }
+        : {}),
     };
     const product = await Product.findOneAndUpdate(
       availableProductFilter({ _id: id, sellerId: req.user.id }),
       update,
       { new: true, runValidators: true }
-    );
-    if (product) {
-      await deleteProductImages(originalImages.filter((image) => !nextImages.includes(image)));
-      const [populatedProduct] = await populateProductSellers([product]);
-      return res.json(toPublicProduct(populatedProduct));
+    ).populate('sellerId', 'name hall year');
+
+    if (!product) {
+      await deleteUploadedImages(uploadedPublicIds);
+      uploadedPublicIds = [];
+      return res.status(409).json({ message: 'This listing is no longer available to edit.' });
     }
-    await deleteUploadedImages(uploadedPublicIds);
-    uploadedPublicIds = [];
-    return res.status(409).json({ message: 'This listing is no longer available to edit.' });
+
+    await deleteProductImages(originalImages.filter((image) => !(product.images || []).includes(image)));
+    return res.json(toPublicProduct(product));
   } catch (error) {
     await deleteUploadedImages(uploadedPublicIds);
     const result = getProductErrorResponse(error, 'Unable to update listing right now.');
@@ -391,15 +378,14 @@ export const updateProductStatus = async (req, res) => {
       availableProductFilter({ _id: id, sellerId: req.user.id }),
       { $set: update },
       { new: false, runValidators: true }
-    ).lean();
+    ).populate('sellerId', 'name hall year').lean();
     if (!before) {
       const existing = await Product.findById(id).select('sellerId status').lean();
       if (!existing) return res.status(404).json({ message: 'Product not found' });
       if (String(existing.sellerId) !== String(req.user.id)) return res.status(403).json({ message: 'You cannot change another seller listing.' });
       return res.status(409).json({ message: `Cannot change a ${existing.status} listing to ${status}.` });
     }
-    const [populatedBefore] = await populateProductSellers([before]);
-    const product = { ...populatedBefore, ...update, updatedAt: new Date() };
+    const product = { ...before, ...update, updatedAt: new Date() };
     return res.json(toPublicProduct(product));
   } catch (error) {
     console.error('Product status update failed:', error);
@@ -431,8 +417,8 @@ export const getSellerProducts = async (req, res) => {
   const sellerId = req.user.id;
 
   try {
-    const products = await Product.find({ sellerId }).sort({ createdAt: -1 }).lean();
-    return res.json((await populateProductSellers(products)).map(toPublicProduct));
+    const products = await Product.find({ sellerId }).populate('sellerId', 'name hall year').sort({ createdAt: -1 }).lean();
+    return res.json(products.map(toPublicProduct));
   } catch (error) {
     console.error('Seller listings failed:', error);
     return res.status(500).json({ message: 'Unable to load your listings right now.' });

@@ -53,7 +53,7 @@ const productSchema = new mongoose.Schema(
       type: String,
       trim: true,
       maxlength: 100,
-      default: 'No defects'
+      default: 'No defects',
     },
     status: {
       type: String,
@@ -61,6 +61,7 @@ const productSchema = new mongoose.Schema(
       default: 'available',
     },
     soldAt: { type: Date, default: null },
+    expiresAt: { type: Date, default: () => new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
     sellerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     clientRequestId: String,
   },
@@ -71,4 +72,5 @@ productSchema.index(
   { sellerId: 1, clientRequestId: 1 },
   { unique: true, partialFilterExpression: { clientRequestId: { $type: 'string' } } }
 );
+productSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 export default mongoose.models.Product || mongoose.model('Product', productSchema);
