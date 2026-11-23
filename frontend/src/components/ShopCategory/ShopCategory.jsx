@@ -47,10 +47,11 @@ const ShopCategoryComponent = ({
       <motion.div
         initial={{ opacity: 0, y: 15 }}
         animate={{ opacity: 1, y: 0 }}
-        className="glass-card p-6 md:p-8 mb-8 bg-gradient-to-r from-navy via-slate-800 to-royal text-white rounded-3xl shadow-xl"
+        className="category-banner mb-8"
       >
-        <h1 className="text-3xl md:text-4xl font-extrabold mb-2 capitalize">{categoryTitle}</h1>
-        <p className="text-slate-300 text-sm md:text-base max-w-2xl">{bannerDesc}</p>
+        <p className="category-kicker">IITK Marketplace / Collection</p>
+        <h1 className="capitalize">{categoryTitle}</h1>
+        <p>{bannerDesc}</p>
       </motion.div>
 
       {/* Filter Bar */}

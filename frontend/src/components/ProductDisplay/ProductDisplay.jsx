@@ -47,9 +47,9 @@ const ProductDisplay = ({ product }) => {
       className="grid md:grid-cols-2 gap-8 lg:gap-12"
     >
       <div>
-        <div className="aspect-square rounded-2xl overflow-hidden mb-4 glass-card border border-slate-200 shadow-lg bg-slate-100 flex items-center justify-center">
+        <div className="product-image-frame aspect-square overflow-hidden mb-4 flex items-center justify-center">
           {images.length > 0 && images[selectedImage] ? (
-            <LazyImage src={images[selectedImage]} alt={product.name} className="w-full h-full object-contain" />
+            <LazyImage src={images[selectedImage]} alt={product.name} className="product-detail-lazy-image w-full h-full" />
           ) : (
             <div className="flex flex-col items-center justify-center text-slate-400 gap-2">
               <ImageOff size={40} />
@@ -63,11 +63,11 @@ const ProductDisplay = ({ product }) => {
               <button
                 key={i}
                 onClick={() => setSelectedImage(i)}
-                className={`w-20 h-20 rounded-xl overflow-hidden shrink-0 border-2 transition-colors bg-slate-100 ${
+                className={`product-detail-thumbnail w-20 h-20 rounded-xl overflow-hidden shrink-0 border-2 transition-colors ${
                   selectedImage === i ? 'border-royal shadow-md' : 'border-transparent'
                 }`}
               >
-                <LazyImage src={img} alt="" className="w-full h-full object-contain" />
+                <LazyImage src={img} alt="" className="product-detail-lazy-image w-full h-full" />
               </button>
             ))}
           </div>

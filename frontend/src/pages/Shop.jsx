@@ -12,11 +12,11 @@ const Shop = () => {
     <div>
       {!searchQuery && <Hero />}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 collection-section">
+        <div className="collection-heading">
           <div>
-            <span className="text-xs font-bold text-royal uppercase tracking-wider">Hall Pickups</span>
-            <h2 className="text-2xl md:text-3xl font-extrabold text-navy mt-1">
+            <span className="kicker">Hall pickups</span>
+            <h2>
               {searchQuery ? `Search Results for "${searchQuery}"` : 'Available Campus Essentials'}
             </h2>
           </div>
